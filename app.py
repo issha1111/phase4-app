@@ -143,6 +143,35 @@ if sheet and not st.session_state['init_done']:
 st.title("🔥 Phase 4: Full Routine")
 st.caption(f"{today_str} (JST)")
 
+# ==========================================
+# 💾 保存ロジック (ここに移動しました！)
+# ==========================================
+if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True):
+    if not sheet:
+        st.error("Sheet Error")
+    else:
+        with st.spinner("Saving..."):
+            progress_dict = {}
+            keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
+            for k in keys:
+                if st.session_state.get(f"{k}_done", False):
+                    progress_dict[k] = st.session_state.get(f"{k}_time", "")
+            progress_json = json.dumps(progress_dict, ensure_ascii=False)
+            row_data = [today_str, st.session_state['wake_up_time'].strftime('%H:%M:%S'), st.session_state['workout_type'], st.session_state.get('sleep_score', 0), st.session_state.get('body_feeling', ""), st.session_state['workout_time'].strftime('%H:%M:%S'), progress_json]
+            
+            try:
+                dates = sheet.col_values(1)
+                if today_str in dates:
+                    row_index = dates.index(today_str) + 1
+                    for i, val in enumerate(row_data):
+                        sheet.update_cell(row_index, i+1, val)
+                    st.success("✅ 保存完了！ (JST)")
+                else:
+                    sheet.append_row(row_data)
+                    st.success("✅ 新規保存完了！ (JST)")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
 # --- 設定 ---
 with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
@@ -212,32 +241,3 @@ if not is_workout_day:
 routine_block("9. 究極回復セット (就寝90分前)", bedtime_items, "bedtime_routine", f"お風呂: {target_bath_str} 頃", default_time_val=target_bath_dt.time())
 
 st.markdown("---")
-
-# ==========================================
-# 💾 保存ロジック (エラー回避修正版)
-# ==========================================
-if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True):
-    if not sheet:
-        st.error("Sheet Error")
-    else:
-        with st.spinner("Saving..."):
-            progress_dict = {}
-            keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
-            for k in keys:
-                if st.session_state.get(f"{k}_done", False):
-                    progress_dict[k] = st.session_state.get(f"{k}_time", "")
-            progress_json = json.dumps(progress_dict, ensure_ascii=False)
-            row_data = [today_str, st.session_state['wake_up_time'].strftime('%H:%M:%S'), st.session_state['workout_type'], st.session_state.get('sleep_score', 0), st.session_state.get('body_feeling', ""), st.session_state['workout_time'].strftime('%H:%M:%S'), progress_json]
-            
-            try:
-                dates = sheet.col_values(1)
-                if today_str in dates:
-                    row_index = dates.index(today_str) + 1
-                    for i, val in enumerate(row_data):
-                        sheet.update_cell(row_index, i+1, val)
-                    st.success("✅ 保存完了！ (JST)")
-                else:
-                    sheet.append_row(row_data)
-                    st.success("✅ 新規保存完了！ (JST)")
-            except Exception as e:
-                st.error(f"Error: {e}")
