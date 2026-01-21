@@ -7,19 +7,14 @@ import json
 # ==========================================
 # 🚀 1. ページ設定 & デザイン
 # ==========================================
-st.set_page_config(page_title="Phase 4 Dashboard", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Phase 4 Dashboard v2", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem; padding-bottom: 5rem; }
     div.stButton > button {
-        width: 100%;
-        background-color: #007AFF;
-        color: white;
-        font-weight: bold;
-        border-radius: 10px;
-        padding: 0.5rem 1rem;
-        border: none;
+        width: 100%; background-color: #007AFF; color: white;
+        font-weight: bold; border-radius: 10px; padding: 0.5rem 1rem; border: none;
     }
     div.stButton > button:hover { background-color: #0056b3; color: white; }
     </style>
@@ -29,14 +24,12 @@ st.markdown("""
 # ⚙️ 設定エリア
 # ==========================================
 SERVICE_ACCOUNT_FILE = 'service_account.json' 
-SPREADSHEET_NAME = 'Phase4_Log'
+SPREADSHEET_NAME = 'Phase4_Log' # ファイル名はそのまま
+WORKSHEET_NAME = 'v2'          # ★ 追加したシート（タブ）の名前
 JST = timezone(timedelta(hours=+9), 'JST')
 
-def get_now_jst():
-    return datetime.now(JST)
-
-def get_today_str():
-    return get_now_jst().strftime('%Y-%m-%d')
+def get_now_jst(): return datetime.now(JST)
+def get_today_str(): return get_now_jst().strftime('%Y-%m-%d')
 
 # ==========================================
 # 🛠 関数定義
@@ -52,25 +45,23 @@ def get_worksheet():
             gc = gspread.service_account_from_dict(creds_dict)
         else:
             gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
-        return gc.open(SPREADSHEET_NAME).sheet1
+        
+        # ★ ここを特定のシート（v2）を開くように変更
+        return gc.open(SPREADSHEET_NAME).worksheet(WORKSHEET_NAME)
     except Exception as e:
-        st.error(f"Connection Error: {e}")
-        return None
+        st.error(f"Connection Error: {e}"); return None
 
 def sync_button(key):
     if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True, key=key):
         sheet = get_worksheet()
-        if not sheet:
-            st.error("シートに接続できません。")
+        if not sheet: st.error("シートに接続できません。")
         else:
             with st.spinner("Saving..."):
                 progress_dict = {}
                 keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
                 for k in keys:
-                    if st.session_state.get(f"{k}_done", False):
-                        progress_dict[k] = st.session_state.get(f"{k}_time", "")
-                    elif st.session_state.get(f"{k}_skipped", False):
-                        progress_dict[k] = "SKIPPED"
+                    if st.session_state.get(f"{k}_done", False): progress_dict[k] = st.session_state.get(f"{k}_time", "")
+                    elif st.session_state.get(f"{k}_skipped", False): progress_dict[k] = "SKIPPED"
                 
                 today_str = get_today_str()
                 row_data = [
@@ -79,101 +70,63 @@ def sync_button(key):
                     st.session_state['workout_type'], 
                     0, "", 
                     st.session_state['workout_time'].strftime('%H:%M:%S'), 
-                    json.dumps(progress_dict, ensure_ascii=False)
+                    st.session_state['bed_time'].strftime('%H:%M:%S'),
+                    json.dumps(progress_dict, ensure_ascii=False),
+                    st.session_state['diary_text']
                 ]
                 try:
                     dates = sheet.col_values(1)
                     if today_str in dates:
                         idx = dates.index(today_str) + 1
                         for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                        st.success("✅ 同期完了")
+                        st.success("✅ 同期完了 (v2)")
                     else:
                         sheet.append_row(row_data)
-                        st.success("✅ 新規保存完了")
+                        st.success("✅ 新規保存完了 (v2)")
                 except Exception as e: st.error(f"Error: {e}")
 
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
-    done_key = f"{key_prefix}_done"
-    time_key = f"{key_prefix}_time"
-    skipped_key = f"{key_prefix}_skipped"
-    picker_key = f"{key_prefix}_picker"
-
+    done_key, time_key, skipped_key, picker_key = f"{key_prefix}_done", f"{key_prefix}_time", f"{key_prefix}_skipped", f"{key_prefix}_picker"
     if done_key not in st.session_state: st.session_state[done_key] = False
     if skipped_key not in st.session_state: st.session_state[skipped_key] = False
-    if time_key not in st.session_state: st.session_state[time_key] = "07:00"
 
     if st.session_state[done_key]:
         with st.container(border=False):
-            actual_time = st.session_state[time_key]
-            clean_title = title.split('<')[0].strip()
-            st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; color: gray;">
-                <h4 style="margin:0; text-decoration: line-through;">{clean_title}</h4>
-                <small>✅ Completed at {actual_time}</small>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; color: gray;"><h4 style="margin:0; text-decoration: line-through;">{title.split("<")[0].strip()}</h4><small>✅ Completed at {st.session_state[time_key]}</small></div>', unsafe_allow_html=True)
             if st.button("↺ 修正", key=f"{key_prefix}_undo"):
                 st.session_state[done_key] = False
-                if key_prefix == "evening_workout":
-                    st.session_state["evening_pre_workout_done"] = False
+                if key_prefix == "evening_workout": st.session_state["evening_pre_workout_done"] = False
                 st.rerun()
-        return st.session_state[time_key]
-
+        return st.session_state.get(time_key, "07:00")
     elif st.session_state[skipped_key]:
         with st.container(border=False):
-            clean_title = title.split('<')[0].strip()
-            st.markdown(f"""
-            <div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;">
-                <h4 style="margin:0;">{clean_title}</h4>
-                <small>⚠️ Skipped (Rest Day)</small>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;"><h4 style="margin:0;">{title.split("<")[0].strip()}</h4><small>⚠️ Skipped</small></div>', unsafe_allow_html=True)
             if st.button("↺ 修正して実行", key=f"{key_prefix}_unskip"):
                 st.session_state[skipped_key] = False
-                if key_prefix == "evening_workout":
-                    st.session_state["evening_pre_workout_skipped"] = False
+                if key_prefix == "evening_workout": st.session_state["evening_pre_workout_skipped"] = False
                 st.rerun()
         return "SKIPPED"
-
     else:
         with st.container(border=True):
-            display_title = title
-            if target_time_str:
-                display_title = f"{title} <span style='color:#FF4B4B; font-size:0.85em;'>({target_time_str})</span>"
+            display_title = title if not target_time_str else f"{title} <span style='color:#FF4B4B; font-size:0.85em;'>({target_time_str})</span>"
             st.markdown(f"### {display_title}", unsafe_allow_html=True)
             for item in items: st.text(f"• {item}")
             st.markdown("---")
-            
+            cols = st.columns([1, 1, 1]) if can_skip else st.columns([1, 1])
+            with cols[0]:
+                input_time = st.time_input("実施時間", value=st.session_state.get(picker_key, default_time_val or time(7, 0)), key=picker_key)
+            with cols[1]:
+                st.write(""); st.write("")
+                if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
+                    st.session_state[done_key], st.session_state[time_key] = True, input_time.strftime('%H:%M'); st.rerun()
             if can_skip:
-                c1, c2, c3 = st.columns([1, 1, 1])
-                with c1:
-                    initial_value = st.session_state.get(picker_key, default_time_val or time(7, 0))
-                    input_time = st.time_input("実施時間", value=initial_value, key=picker_key)
-                with c2:
-                    st.write(""); st.write("")
-                    if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
-                        st.session_state[done_key] = True
-                        st.session_state[time_key] = input_time.strftime('%H:%M')
-                        st.rerun()
-                with c3:
+                with cols[2]:
                     st.write(""); st.write("")
                     if st.button("❌ やらない", key=f"{key_prefix}_skip", use_container_width=True):
                         st.session_state[skipped_key] = True
-                        if key_prefix == "evening_workout":
-                            st.session_state["evening_pre_workout_skipped"] = True
+                        if key_prefix == "evening_workout": st.session_state["evening_pre_workout_skipped"] = True
                         st.rerun()
-            else:
-                c1, c2 = st.columns([1, 1])
-                with c1:
-                    initial_value = st.session_state.get(picker_key, default_time_val or time(7, 0))
-                    input_time = st.time_input("実施時間", value=initial_value, key=picker_key)
-                with c2:
-                    st.write(""); st.write("")
-                    if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
-                        st.session_state[done_key] = True
-                        st.session_state[time_key] = input_time.strftime('%H:%M')
-                        st.rerun()
-        return st.session_state[time_key]
+        return st.session_state.get(time_key, "07:00")
 
 # ==========================================
 # 📥 データ読み込み & 初期化
@@ -184,6 +137,7 @@ if 'init_done' not in st.session_state:
     st.session_state['workout_type'] = "なし"
     st.session_state['workout_time'] = time(18, 0)
     st.session_state['bed_time'] = time(23, 30)
+    st.session_state['diary_text'] = ""
 
 sheet = get_worksheet()
 today_str = get_today_str()
@@ -198,13 +152,14 @@ if sheet and not st.session_state['init_done']:
                 row = today_data.iloc[0]
                 st.session_state['wake_up_time'] = datetime.strptime(str(row['WakeTime']), '%H:%M:%S').time()
                 st.session_state['workout_type'] = str(row['Workout'])
+                st.session_state['workout_time'] = datetime.strptime(str(row['WorkoutTime']), '%H:%M:%S').time()
+                st.session_state['bed_time'] = datetime.strptime(str(row['BedTime']), '%H:%M:%S').time()
+                st.session_state['diary_text'] = str(row.get('Diary', ""))
                 progress = json.loads(str(row['Progress']))
                 for key, val in progress.items():
-                    if val == "SKIPPED":
-                        st.session_state[f"{key}_skipped"] = True
+                    if val == "SKIPPED": st.session_state[f"{key}_skipped"] = True
                     else:
-                        st.session_state[f"{key}_done"] = True
-                        st.session_state[f"{key}_time"] = val
+                        st.session_state[f"{key}_done"], st.session_state[f"{key}_time"] = True, val
                         try: st.session_state[f"{key}_picker"] = datetime.strptime(val, '%H:%M').time()
                         except: pass
     except: pass
@@ -213,7 +168,7 @@ if sheet and not st.session_state['init_done']:
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4 Dashboard")
+st.title("🔥 Phase 4 Dashboard (v2 Tab)")
 st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
@@ -226,39 +181,27 @@ with st.expander("🛠 スケジュール設定", expanded=True):
     with c2:
         base_options = ["ウォーキング", "エアロバイク", "サウナ", "筋トレ", "なし"]
         current_w = st.session_state['workout_type']
-        default_idx = 4
-        for i, opt in enumerate(base_options):
-            if opt in current_w: default_idx = i
+        default_idx = next((i for i, opt in enumerate(base_options) if opt in current_w), 4)
         menu_type = st.selectbox("🏃 運動種目", base_options, index=default_idx)
-        final_workout = "なし"
-        if menu_type == "ウォーキング":
-            val = st.number_input("距離 (km)", value=5.0, step=0.1)
-            final_workout = f"ウォーキング ({val}km)"
-        elif menu_type == "エアロバイク":
-            val = st.number_input("時間 (分)", value=45, step=5)
-            final_workout = f"エアロバイク ({val}分)"
-        elif menu_type == "サウナ":
-            val = st.number_input("セット数", value=3, step=1)
-            final_workout = f"サウナ ({val}セット)"
-        elif menu_type == "筋トレ":
-            val = st.text_input("内容", value="30分")
-            final_workout = f"筋トレ ({val})"
-        st.session_state['workout_type'] = final_workout
+        
+        if menu_type == "ウォーキング": val = st.number_input("距離 (km)", value=5.0, step=0.1); final_w = f"ウォーキング ({val}km)"
+        elif menu_type == "エアロバイク": val = st.number_input("時間 (分)", value=45, step=5); final_w = f"エアロバイク ({val}分)"
+        elif menu_type == "サウナ": val = st.number_input("セット数", value=3, step=1); final_w = f"サウナ ({val}セット)"
+        elif menu_type == "筋トレ": val = st.text_input("内容", value="30分"); final_w = f"筋トレ ({val})"
+        else: final_w = "なし"
+        
+        st.session_state['workout_type'] = final_w
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
 # --- タイムライン ---
 st.markdown("### 🌅 Morning")
 today_date = get_now_jst().date()
-
 ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
-
 try:
     ig_dt = datetime.combine(today_date, datetime.strptime(ign_time, '%H:%M').time())
-    target_m_val = (ig_dt + timedelta(minutes=30)).time()
-    target_m_str = target_m_val.strftime('%H:%M')
+    target_m_str = (ig_dt + timedelta(minutes=30)).strftime('%H:%M'); target_m_val = (ig_dt + timedelta(minutes=30)).time()
 except:
     target_m_str = "--:--"; target_m_val = time(7, 45)
-
 routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_m_str} Start", default_time_val=target_m_val)
 routine_block("3. 朝散歩", ["外気浴 15-20分"], "morning_walk", default_time_val=time(8, 0))
 routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
@@ -276,20 +219,17 @@ if "なし" not in workout_type:
 
 st.markdown("### 🌙 Night & Recovery")
 routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
-
-# --- 9. 究極回復セットの目標計算 ---
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
-# 入浴目安（90分前）
 bath_val = (bed_dt - timedelta(minutes=90)).time()
-# 摂取目標（50分前）
 supple_val = (bed_dt - timedelta(minutes=50)).time()
 target_label = f"入浴目安: {bath_val.strftime('%H:%M')} / 摂取目標: {supple_val.strftime('%H:%M')}"
-
 bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
 if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
     bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
-
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
+
+st.markdown("### 📝 Diary")
+st.session_state['diary_text'] = st.text_area("今日の振り返り・メモ", value=st.session_state['diary_text'], height=150)
 
 st.markdown("---")
 sync_button("bottom_sync")
