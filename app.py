@@ -69,6 +69,8 @@ def sync_button(key):
                 for k in keys:
                     if st.session_state.get(f"{k}_done", False):
                         progress_dict[k] = st.session_state.get(f"{k}_time", "")
+                    elif st.session_state.get(f"{k}_skipped", False):
+                        progress_dict[k] = "SKIPPED"
                 
                 today_str = get_today_str()
                 row_data = [
@@ -90,15 +92,17 @@ def sync_button(key):
                         st.success("✅ 新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
-# can_skip 引数を追加
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
     done_key = f"{key_prefix}_done"
     time_key = f"{key_prefix}_time"
+    skipped_key = f"{key_prefix}_skipped"
     picker_key = f"{key_prefix}_picker"
 
     if done_key not in st.session_state: st.session_state[done_key] = False
+    if skipped_key not in st.session_state: st.session_state[skipped_key] = False
     if time_key not in st.session_state: st.session_state[time_key] = "07:00"
 
+    # --- 1. 完了状態の表示 ---
     if st.session_state[done_key]:
         with st.container(border=False):
             actual_time = st.session_state[time_key]
@@ -113,6 +117,23 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
                 st.session_state[done_key] = False
                 st.rerun()
         return st.session_state[time_key]
+
+    # --- 2. スキップ状態（グレースケール）の表示 ---
+    elif st.session_state[skipped_key]:
+        with st.container(border=False):
+            clean_title = title.split('<')[0].strip()
+            st.markdown(f"""
+            <div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;">
+                <h4 style="margin:0;">{clean_title}</h4>
+                <small>⚠️ Skipped (Rest Day)</small>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("↺ 修正して実行", key=f"{key_prefix}_unskip"):
+                st.session_state[skipped_key] = False
+                st.rerun()
+        return "SKIPPED"
+
+    # --- 3. 通常の入力フォーム ---
     else:
         with st.container(border=True):
             display_title = title
@@ -122,7 +143,6 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
             for item in items: st.text(f"• {item}")
             st.markdown("---")
             
-            # 「やらない」ボタンがある場合はカラムを分ける
             if can_skip:
                 c1, c2, c3 = st.columns([1, 1, 1])
                 with c1:
@@ -136,9 +156,8 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
                         st.rerun()
                 with c3:
                     st.write(""); st.write("")
-                    # 「やらない」ボタン。押すと運動設定が「なし」になり、再描画される
                     if st.button("❌ やらない", key=f"{key_prefix}_skip", use_container_width=True):
-                        st.session_state['workout_type'] = "なし"
+                        st.session_state[skipped_key] = True
                         st.rerun()
             else:
                 c1, c2 = st.columns([1, 1])
@@ -178,10 +197,13 @@ if sheet and not st.session_state['init_done']:
                 st.session_state['workout_type'] = str(row['Workout'])
                 progress = json.loads(str(row['Progress']))
                 for key, val in progress.items():
-                    st.session_state[f"{key}_done"] = True
-                    st.session_state[f"{key}_time"] = val
-                    try: st.session_state[f"{key}_picker"] = datetime.strptime(val, '%H:%M').time()
-                    except: pass
+                    if val == "SKIPPED":
+                        st.session_state[f"{key}_skipped"] = True
+                    else:
+                        st.session_state[f"{key}_done"] = True
+                        st.session_state[f"{key}_time"] = val
+                        try: st.session_state[f"{key}_picker"] = datetime.strptime(val, '%H:%M').time()
+                        except: pass
     except: pass
     st.session_state['init_done'] = True
 
@@ -245,12 +267,12 @@ st.markdown("### ☀️ Lunch")
 routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
 
 workout_type = st.session_state['workout_type']
+# 運動が「なし」でないか、または「スキップされていない」場合に運動準備を表示
 if "なし" not in workout_type:
     st.markdown("### 🌆 Evening (Extra Burn)")
     w_time = st.session_state['workout_time']
     pre_w_val = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).time()
     routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_val.strftime('%H:%M'), default_time_val=pre_w_val)
-    # ★ ここが「ガチ運動」
     routine_block(f"7. ガチ運動 ({workout_type})", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time, can_skip=True)
 
 st.markdown("### 🌙 Night & Recovery")
@@ -259,8 +281,11 @@ routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオ�
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
 bath_val = (bed_dt - timedelta(minutes=90)).time()
 bed_items = ["お風呂 15分", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
-# 運動が「なし」になった瞬間、ここが自動でカルニチンありに変わる
-if "なし" in workout_type: bed_items.append("💊 カルニチン 2錠 (夕方分)")
+
+# 運動が「なし」設定、または「7番でスキップボタンが押された」場合にカルニチンを表示
+if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
+    bed_items.append("💊 カルニチン 2錠 (夕方分)")
+
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
 
 st.markdown("---")
