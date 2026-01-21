@@ -5,11 +5,10 @@ import gspread
 import json
 
 # ==========================================
-# 🚀 1. ページ設定 & デザイン (一番上に置く)
+# 🚀 1. ページ設定 & デザイン
 # ==========================================
 st.set_page_config(page_title="Phase 4 Dashboard", page_icon="⚡", layout="centered")
 
-# おしゃれCSS（青ボタン & ヘッダー隠し）
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem; padding-bottom: 5rem; }
@@ -140,37 +139,6 @@ if sheet and not st.session_state['init_done']:
 st.title("🔥 Phase 4: Full Routine")
 st.caption(f"{today_str} (JST)")
 
-# --- 同期ボタン ---
-if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True):
-    if not sheet: st.error("Sheet Error")
-    else:
-        with st.spinner("Saving..."):
-            progress_dict = {}
-            keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
-            for k in keys:
-                if st.session_state.get(f"{k}_done", False):
-                    progress_dict[k] = st.session_state.get(f"{k}_time", "")
-            
-            row_data = [
-                today_str, 
-                st.session_state['wake_up_time'].strftime('%H:%M:%S'), 
-                st.session_state['workout_type'], 
-                st.session_state.get('sleep_score', 0), 
-                st.session_state.get('body_feeling', ""), 
-                st.session_state['workout_time'].strftime('%H:%M:%S'), 
-                json.dumps(progress_dict, ensure_ascii=False)
-            ]
-            try:
-                dates = sheet.col_values(1)
-                if today_str in dates:
-                    row_index = dates.index(today_str) + 1
-                    for i, val in enumerate(row_data): sheet.update_cell(row_index, i+1, val)
-                    st.success("✅ 保存完了！")
-                else:
-                    sheet.append_row(row_data)
-                    st.success("✅ 新規保存完了！")
-            except Exception as e: st.error(f"Error: {e}")
-
 # --- 🛠 進化したスケジュール設定 ---
 with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
@@ -179,11 +147,9 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         st.session_state['workout_time'] = st.time_input("運動開始予定", value=st.session_state['workout_time'])
     
     with c2:
-        # ★動的メニューの実装
-        current_w = st.session_state['workout_type']
-        # 初期値の判定
         base_options = ["ウォーキング", "エアロバイク", "サウナ", "筋トレ", "なし"]
-        default_idx = 4 # なし
+        current_w = st.session_state['workout_type']
+        default_idx = 4
         for i, opt in enumerate(base_options):
             if opt in current_w: default_idx = i
         
@@ -210,41 +176,62 @@ with st.expander("🛠 スケジュール設定", expanded=True):
 st.markdown("### 🌅 Morning")
 today_date = get_now_jst().date()
 
-ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "サプリ各種"], "morning_ignition", default_time_val=time(7, 15))
+ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
 
-# 連動時間の計算
 try:
     ig_dt = datetime.combine(today_date, datetime.strptime(ign_time, '%H:%M').time())
-    target_muscle_str = (ig_dt + timedelta(minutes=30)).strftime('%H:%M')
     target_muscle_val = (ig_dt + timedelta(minutes=30)).time()
+    target_muscle_str = target_muscle_val.strftime('%H:%M')
 except:
     target_muscle_str = "--:--"; target_muscle_val = time(7, 45)
 
-routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_muscle_str} Start", default_time_val=target_muscle_val)
+routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_muscle_str} Start", default_time_val=target_muscle_val)
 routine_block("3. 朝散歩", ["外気浴 15-20分"], "morning_walk", default_time_val=time(8, 0))
-routine_block("4. 朝食 & サプリ", ["ベースブレッド", "サプリ各種"], "morning_breakfast", default_time_val=time(8, 30))
+routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
 
 st.markdown("### ☀️ Lunch")
-routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス等"], "lunch", default_time_val=time(12, 0))
+routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
 
-# 運動がある場合のみ表示
+# 運動
 workout_type = st.session_state['workout_type']
 if "なし" not in workout_type:
     st.markdown("### 🌆 Evening (Extra Burn)")
     w_time = st.session_state['workout_time']
-    pre_w_str = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).strftime('%H:%M')
     pre_w_val = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).time()
     
-    routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_str, default_time_val=pre_w_val)
+    routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_val.strftime('%H:%M'), default_time_val=pre_w_val)
     routine_block(f"7. {workout_type} 実践", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time)
 
 st.markdown("### 🌙 Night & Recovery")
-routine_block("8. 夕食後", ["ご飯 MAX 120g", "サプリ各種"], "dinner_after", default_time_val=time(19, 0))
+routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
 
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
-bath_str = (bed_dt - timedelta(minutes=90)).strftime('%H:%M')
 bath_val = (bed_dt - timedelta(minutes=90)).time()
 
-routine_block("9. 究極回復セット", ["お風呂 15分", "回復サプリ各種"], "bedtime_routine", f"入浴目安: {bath_str}", default_time_val=bath_val)
+bed_items = ["お風呂 15分", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
+if "なし" in workout_type: bed_items.append("💊 カルニチン 2錠 (夕方分)")
+
+routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
 
 st.markdown("---")
+if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True):
+    if not sheet: st.error("Sheet Error")
+    else:
+        with st.spinner("Saving..."):
+            progress_dict = {}
+            keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
+            for k in keys:
+                if st.session_state.get(f"{k}_done", False):
+                    progress_dict[k] = st.session_state.get(f"{k}_time", "")
+            
+            row_data = [today_str, st.session_state['wake_up_time'].strftime('%H:%M:%S'), st.session_state['workout_type'], 0, "", st.session_state['workout_time'].strftime('%H:%M:%S'), json.dumps(progress_dict, ensure_ascii=False)]
+            try:
+                dates = sheet.col_values(1)
+                if today_str in dates:
+                    idx = dates.index(today_str) + 1
+                    for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
+                    st.success("✅ 同期完了")
+                else:
+                    sheet.append_row(row_data)
+                    st.success("✅ 新規保存完了")
+            except Exception as e: st.error(f"Error: {e}")
