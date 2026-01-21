@@ -24,8 +24,8 @@ st.markdown("""
 # ⚙️ 設定エリア
 # ==========================================
 SERVICE_ACCOUNT_FILE = 'service_account.json' 
-SPREADSHEET_NAME = 'Phase4_Log' # ファイル名はそのまま
-WORKSHEET_NAME = 'v2'          # ★ 追加したシート（タブ）の名前
+SPREADSHEET_NAME = 'Phase4_Log' 
+WORKSHEET_NAME = 'v2'          # ★スプレッドシートのタブ名
 JST = timezone(timedelta(hours=+9), 'JST')
 
 def get_now_jst(): return datetime.now(JST)
@@ -45,8 +45,6 @@ def get_worksheet():
             gc = gspread.service_account_from_dict(creds_dict)
         else:
             gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
-        
-        # ★ ここを特定のシート（v2）を開くように変更
         return gc.open(SPREADSHEET_NAME).worksheet(WORKSHEET_NAME)
     except Exception as e:
         st.error(f"Connection Error: {e}"); return None
@@ -68,7 +66,7 @@ def sync_button(key):
                     today_str, 
                     st.session_state['wake_up_time'].strftime('%H:%M:%S'), 
                     st.session_state['workout_type'], 
-                    0, "", 
+                    0, "", # SleepScore, Bodyfeeling
                     st.session_state['workout_time'].strftime('%H:%M:%S'), 
                     st.session_state['bed_time'].strftime('%H:%M:%S'),
                     json.dumps(progress_dict, ensure_ascii=False),
@@ -79,10 +77,10 @@ def sync_button(key):
                     if today_str in dates:
                         idx = dates.index(today_str) + 1
                         for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                        st.success("✅ 同期完了 (v2)")
+                        st.success("✅ 同期完了")
                     else:
                         sheet.append_row(row_data)
-                        st.success("✅ 新規保存完了 (v2)")
+                        st.success("✅ 新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
@@ -100,7 +98,7 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
         return st.session_state.get(time_key, "07:00")
     elif st.session_state[skipped_key]:
         with st.container(border=False):
-            st.markdown(f'<div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;"><h4 style="margin:0;">{title.split("<")[0].strip()}</h4><small>⚠️ Skipped</small></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;"><h4 style="margin:0;">{title.split("<")[0].strip()}</h4><small>⚠️ Skipped (Rest Day)</small></div>', unsafe_allow_html=True)
             if st.button("↺ 修正して実行", key=f"{key_prefix}_unskip"):
                 st.session_state[skipped_key] = False
                 if key_prefix == "evening_workout": st.session_state["evening_pre_workout_skipped"] = False
@@ -129,7 +127,7 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
         return st.session_state.get(time_key, "07:00")
 
 # ==========================================
-# 📥 データ読み込み & 初期化
+# 📥 データ読み込み & 初期化 (リロード・エラー対策)
 # ==========================================
 if 'init_done' not in st.session_state:
     st.session_state['init_done'] = False
@@ -137,7 +135,7 @@ if 'init_done' not in st.session_state:
     st.session_state['workout_type'] = "なし"
     st.session_state['workout_time'] = time(18, 0)
     st.session_state['bed_time'] = time(23, 30)
-    st.session_state['diary_text'] = ""
+    st.session_state['diary_text'] = "" # ★ここが重要
 
 sheet = get_worksheet()
 today_str = get_today_str()
@@ -168,7 +166,7 @@ if sheet and not st.session_state['init_done']:
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4 Dashboard (v2 Tab)")
+st.title("🔥 Phase 4 Dashboard v2")
 st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
@@ -183,13 +181,11 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         current_w = st.session_state['workout_type']
         default_idx = next((i for i, opt in enumerate(base_options) if opt in current_w), 4)
         menu_type = st.selectbox("🏃 運動種目", base_options, index=default_idx)
-        
         if menu_type == "ウォーキング": val = st.number_input("距離 (km)", value=5.0, step=0.1); final_w = f"ウォーキング ({val}km)"
         elif menu_type == "エアロバイク": val = st.number_input("時間 (分)", value=45, step=5); final_w = f"エアロバイク ({val}分)"
         elif menu_type == "サウナ": val = st.number_input("セット数", value=3, step=1); final_w = f"サウナ ({val}セット)"
         elif menu_type == "筋トレ": val = st.text_input("内容", value="30分"); final_w = f"筋トレ ({val})"
         else: final_w = "なし"
-        
         st.session_state['workout_type'] = final_w
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
@@ -228,8 +224,9 @@ if "なし" in workout_type or st.session_state.get("evening_workout_skipped", F
     bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
 
+# --- 📝 日記セクション ---
 st.markdown("### 📝 Diary")
-st.session_state['diary_text'] = st.text_area("今日の振り返り・メモ", value=st.session_state['diary_text'], height=150)
+st.session_state['diary_text'] = st.text_area("今日の振り返り・メモ", value=st.session_state.get('diary_text', ""), height=150)
 
 st.markdown("---")
 sync_button("bottom_sync")
