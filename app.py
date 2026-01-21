@@ -102,7 +102,6 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
     if skipped_key not in st.session_state: st.session_state[skipped_key] = False
     if time_key not in st.session_state: st.session_state[time_key] = "07:00"
 
-    # --- 1. 完了状態の表示 ---
     if st.session_state[done_key]:
         with st.container(border=False):
             actual_time = st.session_state[time_key]
@@ -115,10 +114,11 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
             """, unsafe_allow_html=True)
             if st.button("↺ 修正", key=f"{key_prefix}_undo"):
                 st.session_state[done_key] = False
+                if key_prefix == "evening_workout":
+                    st.session_state["evening_pre_workout_done"] = False
                 st.rerun()
         return st.session_state[time_key]
 
-    # --- 2. スキップ状態（グレースケール）の表示 ---
     elif st.session_state[skipped_key]:
         with st.container(border=False):
             clean_title = title.split('<')[0].strip()
@@ -130,15 +130,16 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
             """, unsafe_allow_html=True)
             if st.button("↺ 修正して実行", key=f"{key_prefix}_unskip"):
                 st.session_state[skipped_key] = False
+                if key_prefix == "evening_workout":
+                    st.session_state["evening_pre_workout_skipped"] = False
                 st.rerun()
         return "SKIPPED"
 
-    # --- 3. 通常の入力フォーム ---
     else:
         with st.container(border=True):
             display_title = title
             if target_time_str:
-                display_title = f"{title} <span style='color:#FF4B4B; font-size:0.9em;'>({target_time_str})</span>"
+                display_title = f"{title} <span style='color:#FF4B4B; font-size:0.85em;'>({target_time_str})</span>"
             st.markdown(f"### {display_title}", unsafe_allow_html=True)
             for item in items: st.text(f"• {item}")
             st.markdown("---")
@@ -158,6 +159,8 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
                     st.write(""); st.write("")
                     if st.button("❌ やらない", key=f"{key_prefix}_skip", use_container_width=True):
                         st.session_state[skipped_key] = True
+                        if key_prefix == "evening_workout":
+                            st.session_state["evening_pre_workout_skipped"] = True
                         st.rerun()
             else:
                 c1, c2 = st.columns([1, 1])
@@ -226,9 +229,7 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         default_idx = 4
         for i, opt in enumerate(base_options):
             if opt in current_w: default_idx = i
-        
         menu_type = st.selectbox("🏃 運動種目", base_options, index=default_idx)
-        
         final_workout = "なし"
         if menu_type == "ウォーキング":
             val = st.number_input("距離 (km)", value=5.0, step=0.1)
@@ -242,7 +243,6 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         elif menu_type == "筋トレ":
             val = st.text_input("内容", value="30分")
             final_workout = f"筋トレ ({val})"
-        
         st.session_state['workout_type'] = final_workout
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
@@ -267,7 +267,6 @@ st.markdown("### ☀️ Lunch")
 routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
 
 workout_type = st.session_state['workout_type']
-# 運動が「なし」でないか、または「スキップされていない」場合に運動準備を表示
 if "なし" not in workout_type:
     st.markdown("### 🌆 Evening (Extra Burn)")
     w_time = st.session_state['workout_time']
@@ -278,16 +277,19 @@ if "なし" not in workout_type:
 st.markdown("### 🌙 Night & Recovery")
 routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
 
+# --- 9. 究極回復セットの目標計算 ---
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
+# 入浴目安（90分前）
 bath_val = (bed_dt - timedelta(minutes=90)).time()
-bed_items = ["お風呂 15分", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
+# 摂取目標（50分前）
+supple_val = (bed_dt - timedelta(minutes=50)).time()
+target_label = f"入浴目安: {bath_val.strftime('%H:%M')} / 摂取目標: {supple_val.strftime('%H:%M')}"
 
-# 運動が「なし」設定、または「7番でスキップボタンが押された」場合にカルニチンを表示
+bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
 if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
-    bed_items.append("💊 カルニチン 2錠 (夕方分)")
+    bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
 
-routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
+routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
 
 st.markdown("---")
-
 sync_button("bottom_sync")
