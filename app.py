@@ -59,6 +59,40 @@ def get_worksheet():
         st.error(f"Connection Error: {e}")
         return None
 
+# ★ 同期ボタンを表示して実行する共通関数
+def sync_button(key):
+    if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True, key=key):
+        sheet = get_worksheet()
+        if not sheet:
+            st.error("シートに接続できません。")
+        else:
+            with st.spinner("Saving..."):
+                progress_dict = {}
+                keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
+                for k in keys:
+                    if st.session_state.get(f"{k}_done", False):
+                        progress_dict[k] = st.session_state.get(f"{k}_time", "")
+                
+                today_str = get_today_str()
+                row_data = [
+                    today_str, 
+                    st.session_state['wake_up_time'].strftime('%H:%M:%S'), 
+                    st.session_state['workout_type'], 
+                    0, "", 
+                    st.session_state['workout_time'].strftime('%H:%M:%S'), 
+                    json.dumps(progress_dict, ensure_ascii=False)
+                ]
+                try:
+                    dates = sheet.col_values(1)
+                    if today_str in dates:
+                        idx = dates.index(today_str) + 1
+                        for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
+                        st.success("✅ 同期完了")
+                    else:
+                        sheet.append_row(row_data)
+                        st.success("✅ 新規保存完了")
+                except Exception as e: st.error(f"Error: {e}")
+
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None):
     done_key = f"{key_prefix}_done"
     time_key = f"{key_prefix}_time"
@@ -136,10 +170,13 @@ if sheet and not st.session_state['init_done']:
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4: Full Routine")
+st.title("🔥 Phase 4 Dashboard")
 st.caption(f"{today_str} (JST)")
 
-# --- 🛠 進化したスケジュール設定 ---
+# --- 🚀 上側の同期ボタン ---
+sync_button("top_sync")
+
+# --- 🛠 スケジュール設定 ---
 with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
@@ -214,24 +251,6 @@ if "なし" in workout_type: bed_items.append("💊 カルニチン 2錠 (夕方
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
 
 st.markdown("---")
-if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True):
-    if not sheet: st.error("Sheet Error")
-    else:
-        with st.spinner("Saving..."):
-            progress_dict = {}
-            keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
-            for k in keys:
-                if st.session_state.get(f"{k}_done", False):
-                    progress_dict[k] = st.session_state.get(f"{k}_time", "")
-            
-            row_data = [today_str, st.session_state['wake_up_time'].strftime('%H:%M:%S'), st.session_state['workout_type'], 0, "", st.session_state['workout_time'].strftime('%H:%M:%S'), json.dumps(progress_dict, ensure_ascii=False)]
-            try:
-                dates = sheet.col_values(1)
-                if today_str in dates:
-                    idx = dates.index(today_str) + 1
-                    for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                    st.success("✅ 同期完了")
-                else:
-                    sheet.append_row(row_data)
-                    st.success("✅ 新規保存完了")
-            except Exception as e: st.error(f"Error: {e}")
+
+# --- 🚀 下側の同期ボタン ---
+sync_button("bottom_sync")
