@@ -9,7 +9,6 @@ import json
 # ==========================================
 st.set_page_config(page_title="Phase 4 Dashboard", page_icon="⚡", layout="centered")
 
-# CSS: ボタンを青く、余白を調整。ヘッダー（設定メニュー）は表示するように修正！
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem; padding-bottom: 5rem; }
@@ -23,7 +22,6 @@ st.markdown("""
         border: none;
     }
     div.stButton > button:hover { background-color: #0056b3; color: white; }
-    /* footer {visibility: hidden;}  ← フッターだけ隠したい場合はここを有効に */
     </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +90,8 @@ def sync_button(key):
                         st.success("✅ 新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
-def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None):
+# can_skip 引数を追加
+def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
     done_key = f"{key_prefix}_done"
     time_key = f"{key_prefix}_time"
     picker_key = f"{key_prefix}_picker"
@@ -122,16 +121,36 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
             st.markdown(f"### {display_title}", unsafe_allow_html=True)
             for item in items: st.text(f"• {item}")
             st.markdown("---")
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                initial_value = st.session_state.get(picker_key, default_time_val or time(7, 0))
-                input_time = st.time_input("実施時間", value=initial_value, key=picker_key)
-            with c2:
-                st.write(""); st.write("")
-                if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
-                    st.session_state[done_key] = True
-                    st.session_state[time_key] = input_time.strftime('%H:%M')
-                    st.rerun()
+            
+            # 「やらない」ボタンがある場合はカラムを分ける
+            if can_skip:
+                c1, c2, c3 = st.columns([1, 1, 1])
+                with c1:
+                    initial_value = st.session_state.get(picker_key, default_time_val or time(7, 0))
+                    input_time = st.time_input("実施時間", value=initial_value, key=picker_key)
+                with c2:
+                    st.write(""); st.write("")
+                    if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
+                        st.session_state[done_key] = True
+                        st.session_state[time_key] = input_time.strftime('%H:%M')
+                        st.rerun()
+                with c3:
+                    st.write(""); st.write("")
+                    # 「やらない」ボタン。押すと運動設定が「なし」になり、再描画される
+                    if st.button("❌ やらない", key=f"{key_prefix}_skip", use_container_width=True):
+                        st.session_state['workout_type'] = "なし"
+                        st.rerun()
+            else:
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    initial_value = st.session_state.get(picker_key, default_time_val or time(7, 0))
+                    input_time = st.time_input("実施時間", value=initial_value, key=picker_key)
+                with c2:
+                    st.write(""); st.write("")
+                    if st.button("✅ 完了", key=f"{key_prefix}_btn", type="primary", use_container_width=True):
+                        st.session_state[done_key] = True
+                        st.session_state[time_key] = input_time.strftime('%H:%M')
+                        st.rerun()
         return st.session_state[time_key]
 
 # ==========================================
@@ -231,7 +250,8 @@ if "なし" not in workout_type:
     w_time = st.session_state['workout_time']
     pre_w_val = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).time()
     routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_val.strftime('%H:%M'), default_time_val=pre_w_val)
-    routine_block(f"7. {workout_type} 実践", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time)
+    # ★ ここが「ガチ運動」
+    routine_block(f"7. ガチ運動 ({workout_type})", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time, can_skip=True)
 
 st.markdown("### 🌙 Night & Recovery")
 routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
@@ -239,6 +259,7 @@ routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオ�
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
 bath_val = (bed_dt - timedelta(minutes=90)).time()
 bed_items = ["お風呂 15分", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
+# 運動が「なし」になった瞬間、ここが自動でカルニチンありに変わる
 if "なし" in workout_type: bed_items.append("💊 カルニチン 2錠 (夕方分)")
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
 
