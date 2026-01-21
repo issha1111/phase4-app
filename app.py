@@ -33,12 +33,20 @@ if 'init_done' not in st.session_state:
     st.session_state['bed_time'] = time(23, 30)
 
 # ==========================================
-# 🛠 関数定義
+# 🛠 関数定義 (MacでもCloudでも動く最強版)
 # ==========================================
 @st.cache_resource
 def get_worksheet():
     try:
-        gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+        # 1. まずクラウド上の「Secrets」を探す
+        if "gcp_json" in st.secrets:
+            # クラウドの場合: SecretsからJSON文字列を読み込んで辞書にする
+            creds_dict = json.loads(st.secrets["gcp_json"])
+            gc = gspread.service_account_from_dict(creds_dict)
+        else:
+            # 2. なければMac上の「ファイル」を探す
+            gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+
         return gc.open(SPREADSHEET_NAME).sheet1
     except Exception as e:
         st.error(f"Connection Error: {e}")
@@ -213,7 +221,6 @@ if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_c
         st.error("Sheet Error")
     else:
         with st.spinner("Saving..."):
-            # 保存データ作成
             progress_dict = {}
             keys = ["morning_ignition", "morning_muscle", "morning_walk", "morning_breakfast", "lunch", "evening_pre_workout", "evening_workout", "dinner_after", "bedtime_routine"]
             for k in keys:
@@ -223,18 +230,13 @@ if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_c
             row_data = [today_str, st.session_state['wake_up_time'].strftime('%H:%M:%S'), st.session_state['workout_type'], st.session_state.get('sleep_score', 0), st.session_state.get('body_feeling', ""), st.session_state['workout_time'].strftime('%H:%M:%S'), progress_json]
             
             try:
-                # 🔄 日付列(A列)をすべて取得して、今日があるかチェックする方式に変更
-                # (これなら CellNotFoundエラーが出ようがない)
                 dates = sheet.col_values(1)
-                
                 if today_str in dates:
-                    # 更新: 見つかったインデックス(+1で行番号)を使う
                     row_index = dates.index(today_str) + 1
                     for i, val in enumerate(row_data):
                         sheet.update_cell(row_index, i+1, val)
                     st.success("✅ 保存完了！ (JST)")
                 else:
-                    # 新規: 追加する
                     sheet.append_row(row_data)
                     st.success("✅ 新規保存完了！ (JST)")
             except Exception as e:
