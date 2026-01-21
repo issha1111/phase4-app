@@ -9,6 +9,7 @@ import json
 # ==========================================
 st.set_page_config(page_title="Phase 4 Dashboard", page_icon="⚡", layout="centered")
 
+# CSS: ボタンを青く、余白を調整。ヘッダー（設定メニュー）は表示するように修正！
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem; padding-bottom: 5rem; }
@@ -22,8 +23,7 @@ st.markdown("""
         border: none;
     }
     div.stButton > button:hover { background-color: #0056b3; color: white; }
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* footer {visibility: hidden;}  ← フッターだけ隠したい場合はここを有効に */
     </style>
 """, unsafe_allow_html=True)
 
@@ -59,7 +59,6 @@ def get_worksheet():
         st.error(f"Connection Error: {e}")
         return None
 
-# ★ 同期ボタンを表示して実行する共通関数
 def sync_button(key):
     if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True, key=key):
         sheet = get_worksheet()
@@ -173,16 +172,13 @@ if sheet and not st.session_state['init_done']:
 st.title("🔥 Phase 4 Dashboard")
 st.caption(f"{today_str} (JST)")
 
-# --- 🚀 上側の同期ボタン ---
 sync_button("top_sync")
 
-# --- 🛠 スケジュール設定 ---
 with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
         st.session_state['wake_up_time'] = st.time_input("👀 起床", value=st.session_state['wake_up_time'])
         st.session_state['workout_time'] = st.time_input("運動開始予定", value=st.session_state['workout_time'])
-    
     with c2:
         base_options = ["ウォーキング", "エアロバイク", "サウナ", "筋トレ", "なし"]
         current_w = st.session_state['workout_type']
@@ -217,25 +213,23 @@ ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カ
 
 try:
     ig_dt = datetime.combine(today_date, datetime.strptime(ign_time, '%H:%M').time())
-    target_muscle_val = (ig_dt + timedelta(minutes=30)).time()
-    target_muscle_str = target_muscle_val.strftime('%H:%M')
+    target_m_val = (ig_dt + timedelta(minutes=30)).time()
+    target_m_str = target_m_val.strftime('%H:%M')
 except:
-    target_muscle_str = "--:--"; target_muscle_val = time(7, 45)
+    target_m_str = "--:--"; target_m_val = time(7, 45)
 
-routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_muscle_str} Start", default_time_val=target_muscle_val)
+routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_m_str} Start", default_time_val=target_m_val)
 routine_block("3. 朝散歩", ["外気浴 15-20分"], "morning_walk", default_time_val=time(8, 0))
 routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
 
 st.markdown("### ☀️ Lunch")
 routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
 
-# 運動
 workout_type = st.session_state['workout_type']
 if "なし" not in workout_type:
     st.markdown("### 🌆 Evening (Extra Burn)")
     w_time = st.session_state['workout_time']
     pre_w_val = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).time()
-    
     routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_val.strftime('%H:%M'), default_time_val=pre_w_val)
     routine_block(f"7. {workout_type} 実践", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time)
 
@@ -244,13 +238,10 @@ routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオ�
 
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
 bath_val = (bed_dt - timedelta(minutes=90)).time()
-
 bed_items = ["お風呂 15分", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
 if "なし" in workout_type: bed_items.append("💊 カルニチン 2錠 (夕方分)")
-
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", f"入浴目安: {bath_val.strftime('%H:%M')}", default_time_val=bath_val)
 
 st.markdown("---")
 
-# --- 🚀 下側の同期ボタン ---
 sync_button("bottom_sync")
