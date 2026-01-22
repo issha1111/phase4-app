@@ -5,91 +5,80 @@ import json
 from PIL import Image
 
 # 🚀 ページ設定
-st.set_page_config(page_title="Sleep Analyzer G3", page_icon="🌙")
+st.set_page_config(page_title="Sleep Analyzer 2026", page_icon="🌙")
 
 # ==========================================
 # ⚙️ 接続設定
 # ==========================================
+# 新しいAPIキー（AIzaSyC...）をSecretsに貼ってください
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def get_worksheet():
-    # 1. あなたが設定した gcp_json を取得
+    # 1. あなたが新しく作成・貼り付けした gcp_json を取得
     raw_json = st.secrets["gcp_json"].strip()
     
     # 2. 【Invalid \escape 対策】
-    # 文字列の読み込みエラーを物理的に回避
+    # この2行が char 1094 などのエラーを物理的に消し去ります
     safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
     creds_dict = json.loads(safe_json, strict=False)
     
-    # 3. Google 認証用に改行コードを復元
+    # 3. 秘密鍵の中の改行コードを Google 認証が認識できる形に戻す
     if "private_key" in creds_dict:
         creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
     
     gc = gspread.service_account_from_dict(creds_dict)
-    # スプレッドシート名とタブ名を確認
+    # スプレッドシート名「Phase4_Log」の「SleepLog」タブを開く
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
 # ==========================================
-# 🧠 AI解析エンジン (Gemini 3 Flash 専用)
+# 🧠 AI解析エンジン (2026年固定)
 # ==========================================
-def analyze_images_with_g3(images):
-    # ご希望のモデル名を指定。もし 404 が出る場合は 'models/gemini-3-flash' を試してください
-    model = genai.GenerativeModel('models/gemini-3-flash')
+def analyze_images(images):
+    # 429エラー（制限）が出た場合は 'gemini-1.5-flash' に書き換えてください
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # 【2026年問題対策】
     prompt = """
     Extract sleep data from the screenshot and return ONLY a JSON object.
-    IMPORTANT: The current year is 2026. Use "2026" for the date field.
-    JSON keys: date(2026-MM-DD), sleep_score, total_sleep, fall_asleep, wake_up, rem, light, deep, avg_hr, min_hr, max_hr, resting_hr
+    IMPORTANT: The current year is 2026. Use "2026" for the year in the date field.
+    
+    JSON keys: date(YYYY-MM-DD), sleep_score, total_sleep, fall_asleep, wake_up, rem, light, deep, avg_hr, min_hr, max_hr, resting_hr
     """
     
     response = model.generate_content([prompt, *images])
-    
-    # AIが余計なことを言っても JSON だけを抜き出す頑丈な処理
     res_text = response.text
+    # JSON部分だけを強引に抜き出す処理
     start = res_text.find('{')
     end = res_text.rfind('}') + 1
-    if start == -1:
-        return None
     return json.loads(res_text[start:end])
 
-# ==========================================
-# 🖥 UI
-# ==========================================
-st.title("🌙 Sleep Analyzer G3")
-st.write("2026年のログとして Gemini 3 Flash で解析します。")
+# --- UI ---
+st.title("🌙 Sleep Analyzer 2026")
 
-uploaded_files = st.file_uploader("スクショを選択", accept_multiple_files=True)
+files = st.file_uploader("スクショを選択", accept_multiple_files=True)
 
-if uploaded_files:
-    images = [Image.open(f) for f in uploaded_files]
+if files:
+    images = [Image.open(f) for f in files]
     st.image(images, use_container_width=True)
     
-    if st.button("✨ Gemini 3 で解析を実行"):
-        with st.spinner("AI 解析中..."):
+    if st.button("✨ AI解析を実行"):
+        with st.spinner("2026年のログとして解析中..."):
             try:
-                result = analyze_images_with_g3(images)
-                if result:
-                    st.session_state['sleep_data'] = result
-                    st.success("解析成功！")
-                    st.json(result) # ここで 2026-01-22 等になっているかチェック！
-                else:
-                    st.error("データの抽出に失敗しました。")
+                result = analyze_images(images)
+                st.session_state['sleep_result'] = result
+                st.success("解析成功！")
+                st.json(result) # ここで 2026 になっているかチェック！
             except Exception as e:
-                # もし gemini-3-flash でも 404 が出る場合は、モデル名の微調整が必要です
                 st.error(f"解析失敗: {e}")
 
-if 'sleep_data' in st.session_state:
-    if st.button("📝 スプレッドシートに保存"):
-        with st.spinner("保存中..."):
-            try:
-                sheet = get_worksheet()
-                d = st.session_state['sleep_data']
-                row = [d.get('date'), d.get('sleep_score'), d.get('total_sleep'), d.get('fall_asleep'), d.get('wake_up'), d.get('rem'), d.get('light'), d.get('deep'), d.get('avg_hr'), d.get('min_hr'), d.get('max_hr'), d.get('resting_hr')]
-                sheet.append_row(row)
-                st.balloons()
-                st.success("スプレッドシートへの保存が完了しました！")
-                del st.session_state['sleep_data']
-            except Exception as e:
-                st.error(f"保存エラー: {e}")
+if 'sleep_result' in st.session_state and st.button("📝 スプレッドシートに保存"):
+    try:
+        sheet = get_worksheet()
+        d = st.session_state['sleep_result']
+        row = [d.get(k) for k in ['date', 'sleep_score', 'total_sleep', 'fall_asleep', 'wake_up', 'rem', 'light', 'deep', 'avg_hr', 'min_hr', 'max_hr', 'resting_hr']]
+        sheet.append_row(row)
+        st.balloons()
+        st.success("2026年のログとして保存完了！")
+        del st.session_state['sleep_result']
+    except Exception as e:
+        st.error(f"保存エラー（コードが反映されていない可能性があります）: {e}")
