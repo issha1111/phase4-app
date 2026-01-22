@@ -4,7 +4,7 @@ import gspread
 import json
 from PIL import Image
 
-st.set_page_config(page_title="Sleep Analyzer", page_icon="🌙")
+st.set_page_config(page_title="Sleep Analyzer 2026", page_icon="🌙")
 
 # ==========================================
 # ⚙️ 接続設定
@@ -14,7 +14,7 @@ if "GOOGLE_API_KEY" in st.secrets:
 
 def get_worksheet():
     raw_json = st.secrets["gcp_json"].strip()
-    # Invalid \escape 対策（gcp_json読み込み用）
+    # Invalid \escape 対策
     safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
     creds_dict = json.loads(safe_json, strict=False)
     if "private_key" in creds_dict:
@@ -23,35 +23,42 @@ def get_worksheet():
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
 # ==========================================
-# 🧠 AI解析エンジン（2026年固定＆JSON特化）
+# 🧠 AI解析エンジン（404エラー回避ロジック）
 # ==========================================
 def analyze_images(images):
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # 【修正ポイント】モデル名の頭に models/ を付与
+    model_name = 'models/gemini-1.5-flash'
     
-    # AIが余計なことを言わないよう、指示をさらにシンプルにしました
-    prompt = """
-    Extract sleep data from the screenshot and return ONLY a JSON object.
-    IMPORTANT: The current year is 2026. Use "2026" for the date.
-    
-    JSON keys: date(YYYY-MM-DD), sleep_score, total_sleep, fall_asleep, wake_up, rem, light, deep, avg_hr, min_hr, max_hr, resting_hr
-    """
-    
-    response = model.generate_content([prompt, *images])
-    
-    # AIの返答からJSON部分だけを強引に抜き出す処理を追加（解析失敗対策）
-    res_text = response.text
-    start_index = res_text.find('{')
-    end_index = res_text.rfind('}') + 1
-    if start_index == -1 or end_index == 0:
-        return None
+    try:
+        model = genai.GenerativeModel(model_name)
         
-    json_str = res_text[start_index:end_index]
-    return json.loads(json_str)
+        # 2026年固定＆JSON特化プロンプト
+        prompt = """
+        Extract sleep data from the screenshot and return ONLY a JSON object.
+        IMPORTANT: The current year is 2026. Use "2026" for the date field.
+        
+        JSON keys: date(YYYY-MM-DD), sleep_score, total_sleep, fall_asleep, wake_up, rem, light, deep, avg_hr, min_hr, max_hr, resting_hr
+        """
+        
+        response = model.generate_content([prompt, *images])
+        
+        # JSON部分だけを確実に抜き出す
+        res_text = response.text
+        start = res_text.find('{')
+        end = res_text.rfind('}') + 1
+        if start == -1: return None
+        
+        return json.loads(res_text[start:end])
+    
+    except Exception as e:
+        # 万が一 404 が出た場合、利用可能なモデル名をエラーに含めて表示する
+        available = [m.name for m in genai.list_models()]
+        raise Exception(f"Model error. Available models: {available}. Error: {e}")
 
 # ==========================================
 # 🖥 UI
 # ==========================================
-st.title("🌙 Sleep Analyzer (2026 Fix)")
+st.title("🌙 Sleep Analyzer (Model Fix)")
 
 uploaded_files = st.file_uploader("スクショを選択", accept_multiple_files=True)
 
@@ -66,9 +73,9 @@ if uploaded_files:
                 if result:
                     st.session_state['sleep_data'] = result
                     st.success("解析成功！")
-                    st.json(result) # ここで 2026 になっているか確認！
+                    st.json(result)
                 else:
-                    st.error("AIから正しいデータが返ってきませんでした。")
+                    st.error("データ抽出に失敗しました。")
             except Exception as e:
                 st.error(f"解析失敗: {e}")
 
