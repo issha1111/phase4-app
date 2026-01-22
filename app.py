@@ -37,15 +37,26 @@ def get_today_str(): return get_now_jst().strftime('%Y-%m-%d')
 @st.cache_resource
 def get_worksheet():
     try:
-        if "gcp_json" in st.secrets:
-            creds_dict = json.loads(st.secrets["gcp_json"])
-            gc = gspread.service_account_from_dict(creds_dict)
-        elif "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            gc = gspread.service_account_from_dict(creds_dict)
-        else:
-            gc = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+        # sleep_app.py で成功した「最強の接続ロジック」をここに移植！
+        
+        # 1. Secretsがあるか確認
+        if "gcp_json" not in st.secrets:
+            st.error("Secretsに 'gcp_json' が見つかりません。設定を確認してください。")
+            return None
+
+        # 2. JSONを取得してクリーニング
+        raw_json = st.secrets["gcp_json"].strip()
+        safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
+        creds_dict = json.loads(safe_json, strict=False)
+        
+        # 3. 秘密鍵の改行を復元
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
+        
+        # 4. 接続してシートを開く
+        gc = gspread.service_account_from_dict(creds_dict)
         return gc.open(SPREADSHEET_NAME).worksheet(WORKSHEET_NAME)
+        
     except Exception as e:
         st.error(f"Connection Error: {e}"); return None
 
