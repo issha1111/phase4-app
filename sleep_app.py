@@ -16,23 +16,21 @@ def get_worksheet():
     raw_json = st.secrets["gcp_json"].strip()
     
     # 2. 【Invalid \escape 対策】
-    # 文字列の中のバックスラッシュを安全な形に変換（char 1094エラーを粉砕します）
     safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
     creds_dict = json.loads(safe_json, strict=False)
     
-    # 3. 秘密鍵の改行をGoogleが求める本物の改行に復元
+    # 3. 秘密鍵の改行を復元
     if "private_key" in creds_dict:
         creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
     
     gc = gspread.service_account_from_dict(creds_dict)
-    # スプレッドシート名とタブ名を確認
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
 def analyze_images(images):
-    # あなたのリスト にあった正確なモデル名
+    # モデル設定
     model = genai.GenerativeModel('models/gemini-3-flash-preview')
     
-    # 2026年1月22日であることをAIに叩き込む
+    # 2026年固定プロンプト
     prompt = """
     睡眠スクショからデータを抽出しJSONで返して。
     【最重要】現在は2026年1月です。日付の年は必ず「2026」にしてください。
@@ -45,36 +43,51 @@ def analyze_images(images):
     end = res_text.rfind('}') + 1
     return json.loads(res_text[start:end])
 
-# --- UI ---
-st.title("🌙 Sleep Analyzer 2026 (Final)")
+# --- UIレイアウト ---
+st.title("🌙 Sleep Analyzer 2026 (UI Fix)")
 
 files = st.file_uploader("スクショを選択", accept_multiple_files=True)
 
 if files:
     images = [Image.open(f) for f in files]
-    st.image(images, use_container_width=True)
     
-    if st.button("✨ 2026年のログとして解析"):
-        with st.spinner("AI解析中..."):
-            try:
-                result = analyze_images(images)
-                st.session_state['sleep_data'] = result
-                st.success("解析成功！")
-                st.json(result) # ここが 2026 になっていればOK！
-            except Exception as e:
-                # 期限切れエラー が出たらキーを貼り替えてください
-                st.error(f"解析失敗: {e}")
+    # 🔽 ここでレイアウト変更！ボタンを画像より上に配置 🔽
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    # 左側：解析ボタン
+    with col1:
+        if st.button("✨ 解析実行", use_container_width=True):
+            with st.spinner("AI解析中..."):
+                try:
+                    result = analyze_images(images)
+                    st.session_state['sleep_data'] = result
+                    st.success("解析成功！")
+                except Exception as e:
+                    st.error(f"解析失敗: {e}")
 
-if 'sleep_data' in st.session_state:
-    if st.button("📝 スプレッドシートに保存"):
-        with st.spinner("スプレッドシートに保存中..."):
-            try:
-                sheet = get_worksheet()
-                d = st.session_state['sleep_data']
-                row = [d.get(k) for k in ['date', 'sleep_score', 'total_sleep', 'fall_asleep', 'wake_up', 'rem', 'light', 'deep', 'avg_hr', 'min_hr', 'max_hr', 'resting_hr']]
-                sheet.append_row(row)
-                st.balloons()
-                st.success("保存完了！2026年のログが刻まれました。")
-                del st.session_state['sleep_data']
-            except Exception as e:
-                st.error(f"保存エラー: {e}")
+    # 右側：保存ボタン（解析データがある時だけ押せるように表示）
+    with col2:
+        if 'sleep_data' in st.session_state:
+            if st.button("📝 保存実行", use_container_width=True):
+                with st.spinner("保存中..."):
+                    try:
+                        sheet = get_worksheet()
+                        d = st.session_state['sleep_data']
+                        row = [d.get(k) for k in ['date', 'sleep_score', 'total_sleep', 'fall_asleep', 'wake_up', 'rem', 'light', 'deep', 'avg_hr', 'min_hr', 'max_hr', 'resting_hr']]
+                        sheet.append_row(row)
+                        st.balloons()
+                        st.success("保存完了！")
+                        del st.session_state['sleep_data']
+                    except Exception as e:
+                        st.error(f"保存エラー: {e}")
+
+    # 解析結果のJSONも上の方が見やすいのでここに配置
+    if 'sleep_data' in st.session_state:
+        st.caption("解析結果データ:")
+        st.json(st.session_state['sleep_data'])
+
+    # 画像は一番下に追いやる（確認用）
+    st.markdown("---")
+    with st.expander("アップロードした画像を確認する"):
+        st.image(images, use_container_width=True)
