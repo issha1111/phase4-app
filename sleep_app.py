@@ -35,7 +35,7 @@ def get_worksheet():
 # ==========================================
 def analyze_images_with_g3(images):
     # ご希望のモデル名を指定。もし 404 が出る場合は 'models/gemini-3-flash' を試してください
-    model = genai.GenerativeModel('gemini-3-flash')
+    model = genai.GenerativeModel('models/gemini-3-flash')
     
     # 【2026年問題対策】
     prompt = """
