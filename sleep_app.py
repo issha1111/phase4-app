@@ -6,34 +6,25 @@ from datetime import datetime
 from PIL import Image
 
 # ==========================================
-# 🚀 1. ページ設定 & デザイン
+# 🚀 1. ページ設定
 # ==========================================
 st.set_page_config(page_title="Sleep Analyzer G3", page_icon="🌙", layout="centered")
 
-# iOSアプリ風のボタンデザイン
-st.markdown("""
-    <style>
-    .stButton > button {
-        width: 100%; border-radius: 12px; height: 3.5em;
-        background-color: #007AFF; color: white; font-weight: bold;
-        border: none; margin-top: 10px;
-    }
-    .stButton > button:active {
-        background-color: #0051a8;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # ==========================================
-# ⚙️ 接続設定
+# ⚙️ 接続設定（修正ポイント！）
 # ==========================================
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def get_worksheet():
-    # Streamlit CloudのSecretsから認証情報を取得
-    creds = json.loads(st.secrets["gcp_json"])
+    # Secretsから辞書形式で取得
+    creds = dict(st.secrets["gcp_service_account"])
+    
+    # 【重要】Secretsの文字列内の \\n を 実際の改行コード \n に変換します
+    # これをしないと、秘密鍵の形式エラーで保存が失敗します
+    creds["private_key"] = creds["private_key"].replace("\\n", "\n")
+    
     gc = gspread.service_account_from_dict(creds)
-    # スプレッドシート「Phase4_Log」の「SleepLog」タブを指定
+    # スプレッドシート「Phase4_Log」の「SleepLog」タブを開く
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
 # ==========================================
@@ -43,72 +34,60 @@ def analyze_images_with_g3(images):
     model = genai.GenerativeModel('gemini-3-flash-preview')
     
     prompt = """
-    あなたは健康管理のスペシャリストです。提供された睡眠アプリの画像から、以下の項目を抽出し、JSON形式でのみ回答してください。
-    
-    【抽出項目】
-    - date: 睡眠日 (YYYY-MM-DD)
-    - sleep_score: スコア (数値)
-    - total_sleep: 合計睡眠時間 (例: 6h43m)
-    - fall_asleep: 入眠時刻 (HH:MM)
-    - wake_up: 起床時刻 (HH:MM)
-    - rem: レム睡眠 (例: 58m)
-    - light: 浅い眠り (例: 4h31m)
-    - deep: 深い眠り (例: 1h14m)
-    - avg_hr: 平均心拍数 (数値)
-    - min_hr: 最小心拍数 (数値)
-    - max_hr: 最大心拍数 (数値)
-    - resting_hr: 安静時心拍数 (数値)
+    睡眠アプリのスクリーンショットから以下の項目を抽出し、JSONで返してください。
+    項目: date(YYYY-MM-DD), sleep_score, total_sleep, fall_asleep, wake_up, rem, light, deep, avg_hr, min_hr, max_hr, resting_hr
+    JSON以外のテキストは含めないでください。
     """
     
     response = model.generate_content([prompt, *images])
-    # JSON以外の余計な文字（```jsonなど）を除去
     clean_text = response.text.replace('```json', '').replace('```', '').strip()
     return json.loads(clean_text)
 
 # ==========================================
-# 🖥 メインUI
+# 🖥 UIレイアウト
 # ==========================================
 st.title("🌙 Sleep Analyzer G3")
-st.write("画像をアップロードして、AI解析を開始してください。")
 
-uploaded_files = st.file_uploader("睡眠のスクショをアップロード", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+uploaded_files = st.file_uploader("睡眠スクショをアップロード", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
 if uploaded_files:
     images = [Image.open(f) for f in uploaded_files]
     
-    # 【修正ポイント】画像の数に合わせてキャプションのリストを作成
-    captions = [f"解析対象の画像 {i+1}" for i in range(len(images))]
+    # 【修正】画像とキャプションの数を一致させてエラーを回避
+    captions = [f"画像 {i+1}" for i in range(len(images))]
     st.image(images, caption=captions, use_container_width=True)
     
-    if st.button("✨ AIで睡眠データを解析"):
-        with st.spinner("Gemini 3 が画像を読み取っています..."):
+    if st.button("✨ AI解析を実行"):
+        with st.spinner("Gemini 3 が解析中..."):
             try:
                 result = analyze_images_with_g3(images)
-                st.session_state['sleep_result'] = result
-                st.success("解析完了！")
+                st.session_state['sleep_data'] = result
+                st.success("解析成功！")
                 st.json(result)
             except Exception as e:
-                st.error(f"解析に失敗しました: {e}")
+                st.error(f"解析エラー: {e}")
 
-# 保存処理
-if 'sleep_result' in st.session_state:
-    if st.button("📝 スプレッドシートへ保存"):
-        with st.spinner("保存しています..."):
+# ==========================================
+# 📝 スプレッドシート保存処理
+# ==========================================
+if 'sleep_data' in st.session_state:
+    if st.button("📝 スプレッドシートに保存"):
+        with st.spinner("保存中..."):
             try:
                 sheet = get_worksheet()
-                r = st.session_state['sleep_result']
+                d = st.session_state['sleep_data']
                 
-                # スプレッドシートの列順(Date〜RestingHR)に並べ替え
-                row_data = [
-                    r.get('date'), r.get('sleep_score'), r.get('total_sleep'),
-                    r.get('fall_asleep'), r.get('wake_up'), r.get('rem'),
-                    r.get('light'), r.get('deep'), r.get('avg_hr'),
-                    r.get('min_hr'), r.get('max_hr'), r.get('resting_hr')
+                # 指定の順番でリストを作成
+                row = [
+                    d.get('date'), d.get('sleep_score'), d.get('total_sleep'),
+                    d.get('fall_asleep'), d.get('wake_up'), d.get('rem'),
+                    d.get('light'), d.get('deep'), d.get('avg_hr'),
+                    d.get('min_hr'), d.get('max_hr'), d.get('resting_hr')
                 ]
                 
-                sheet.append_row(row_data)
+                sheet.append_row(row)
                 st.balloons()
-                st.success("スプレッドシートの 'SleepLog' に保存しました！")
-                del st.session_state['sleep_result']
+                st.success("スプレッドシートへの保存が完了しました！")
+                del st.session_state['sleep_data']
             except Exception as e:
                 st.error(f"保存エラー: {e}")
