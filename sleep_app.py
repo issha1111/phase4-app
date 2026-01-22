@@ -5,22 +5,24 @@ import json
 from PIL import Image
 
 # 🚀 ページ設定
-st.set_page_config(page_title="Sleep Analyzer 2026", page_icon="🌙")
+st.set_page_config(page_title="Sleep Analyzer G3", page_icon="🌙")
 
+# ==========================================
 # ⚙️ 接続設定
+# ==========================================
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def get_worksheet():
-    # 1. あなたが新しく貼った gcp_json を取得
+    # 1. あなたが設定した gcp_json を取得
     raw_json = st.secrets["gcp_json"].strip()
     
     # 2. 【Invalid \escape 対策】
-    # 文字列の読み込みエラーを回避するため、特殊記号をエスケープ
+    # 文字列の読み込みエラーを物理的に回避
     safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
     creds_dict = json.loads(safe_json, strict=False)
     
-    # 3. 秘密鍵の中の改行コードを Google が求める形に復元
+    # 3. Google 認証用に改行コードを復元
     if "private_key" in creds_dict:
         creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
     
@@ -28,11 +30,14 @@ def get_worksheet():
     # スプレッドシート名とタブ名を確認
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
-def analyze_images(images):
-    # 429エラー回避のため、安定している gemini-1.5-flash を推奨
-    model = genai.GenerativeModel('gemini-1.5-flash')
+# ==========================================
+# 🧠 AI解析エンジン (Gemini 3 Flash 専用)
+# ==========================================
+def analyze_images_with_g3(images):
+    # ご希望のモデル名を指定。もし 404 が出る場合は 'models/gemini-3-flash' を試してください
+    model = genai.GenerativeModel('gemini-3-flash')
     
-    # 2026年固定の強力な指示
+    # 【2026年問題対策】
     prompt = """
     Extract sleep data from the screenshot and return ONLY a JSON object.
     IMPORTANT: The current year is 2026. Use "2026" for the date field.
@@ -40,13 +45,20 @@ def analyze_images(images):
     """
     
     response = model.generate_content([prompt, *images])
+    
+    # AIが余計なことを言っても JSON だけを抜き出す頑丈な処理
     res_text = response.text
     start = res_text.find('{')
     end = res_text.rfind('}') + 1
+    if start == -1:
+        return None
     return json.loads(res_text[start:end])
 
-# --- UI部分 ---
-st.title("🌙 Sleep Analyzer (Final Sync)")
+# ==========================================
+# 🖥 UI
+# ==========================================
+st.title("🌙 Sleep Analyzer G3")
+st.write("2026年のログとして Gemini 3 Flash で解析します。")
 
 uploaded_files = st.file_uploader("スクショを選択", accept_multiple_files=True)
 
@@ -54,27 +66,30 @@ if uploaded_files:
     images = [Image.open(f) for f in uploaded_files]
     st.image(images, use_container_width=True)
     
-    if st.button("✨ 2026年のデータとして解析"):
-        with st.spinner("AI解析中..."):
+    if st.button("✨ Gemini 3 で解析を実行"):
+        with st.spinner("AI 解析中..."):
             try:
-                result = analyze_images(images)
-                st.session_state['sleep_data'] = result
-                st.success("解析成功！")
-                st.json(result)
+                result = analyze_images_with_g3(images)
+                if result:
+                    st.session_state['sleep_data'] = result
+                    st.success("解析成功！")
+                    st.json(result) # ここで 2026-01-22 等になっているかチェック！
+                else:
+                    st.error("データの抽出に失敗しました。")
             except Exception as e:
+                # もし gemini-3-flash でも 404 が出る場合は、モデル名の微調整が必要です
                 st.error(f"解析失敗: {e}")
 
 if 'sleep_data' in st.session_state:
     if st.button("📝 スプレッドシートに保存"):
-        with st.spinner("スプレッドシートに書き込み中..."):
+        with st.spinner("保存中..."):
             try:
                 sheet = get_worksheet()
                 d = st.session_state['sleep_data']
                 row = [d.get('date'), d.get('sleep_score'), d.get('total_sleep'), d.get('fall_asleep'), d.get('wake_up'), d.get('rem'), d.get('light'), d.get('deep'), d.get('avg_hr'), d.get('min_hr'), d.get('max_hr'), d.get('resting_hr')]
                 sheet.append_row(row)
                 st.balloons()
-                st.success("2026年のデータとして保存完了！")
+                st.success("スプレッドシートへの保存が完了しました！")
                 del st.session_state['sleep_data']
             except Exception as e:
-                # このエラーが出るなら、まだGitHubへのpushが反映されていません
                 st.error(f"保存エラー: {e}")
