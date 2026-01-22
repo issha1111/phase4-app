@@ -3,3 +3,4 @@ pandas
 gspread
 oauth2client
 google-generativeai>=0.8.0
+pillow
