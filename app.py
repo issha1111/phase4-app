@@ -182,14 +182,14 @@ if 'init_done' not in st.session_state:
     st.session_state['meal_dinner'] = ""
 
 if not st.session_state['init_done']:
-    # 1. ルーティーン読込
+    # 1. ルーティーン読込 (ヘッダー重複対策)
     sheet = get_worksheet(WORKSHEET_NAME)
     if sheet:
         try:
             raw_routine = sheet.get_all_values()
             if len(raw_routine) > 1:
-                # 重複や空ヘッダー対策
-                headers = [h if h != "" else f"COL_{i}" for i, h in enumerate(raw_routine[0])]
+                # 空白や重複を COL_N に置き換え
+                headers = [h if (h and h.strip()) else f"COL_{i}" for i, h in enumerate(raw_routine[0])]
                 df = pd.DataFrame(raw_routine[1:], columns=headers)
                 if 'Date' in df.columns:
                     today_data = df[df['Date'] == today_str]
@@ -206,14 +206,14 @@ if not st.session_state['init_done']:
                             else: st.session_state[f"{key}_done"], st.session_state[f"{key}_time"] = True, val
         except: pass
     
-    # 2. 食事記録 (mealrecord) 読込 ★ここが修正ポイント
+    # 2. 食事記録読込 (ヘッダー重複対策の要)
     m_sheet = get_worksheet(MEAL_WORKSHEET_NAME)
     if m_sheet:
         try:
             raw_m = m_sheet.get_all_values()
             if len(raw_m) > 1:
-                # ★空のヘッダーがあっても COL_番号 という名前にして無理やりDataFrameにする
-                headers_m = [h if h != "" else f"COL_{i}" for i, h in enumerate(raw_m[0])]
+                # 空白や重複を COL_N に強制置換してエラーを回避
+                headers_m = [h if (h and h.strip()) else f"COL_{i}" for i, h in enumerate(raw_m[0])]
                 m_df = pd.DataFrame(raw_m[1:], columns=headers_m)
                 
                 if 'DATE' in m_df.columns:
@@ -223,7 +223,7 @@ if not st.session_state['init_done']:
                         st.session_state['meal_breakfast'] = str(m_row.get('BREAKFAST', ""))
                         st.session_state['meal_lunch'] = str(m_row.get('LUNCH', ""))
                         st.session_state['meal_dinner'] = str(m_row.get('DINNER', ""))
-                        st.toast(f"✅ {today_str} の食事データを復旧しました")
+                        st.toast(f"✅ {today_str} の食事を復元しました")
         except Exception as e:
             st.error(f"Meal Load Error: {e}")
     st.session_state['init_done'] = True
@@ -257,7 +257,7 @@ with st.expander("🛠 スケジュール設定", expanded=False):
 
 # --- 🍴 食事記録 ---
 with st.expander("🍴 食事記録 (mealrecord)", expanded=True):
-    st.caption("空の見出しがあっても自動補完して読み込みます。")
+    st.caption("見出しの空白も自動補完して読み込みます。")
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
         st.text_area("🍳 朝食", key="meal_breakfast", height=120)
