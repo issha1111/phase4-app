@@ -123,10 +123,10 @@ def sync_button(key):
                     if today_str in dates:
                         idx = dates.index(today_str) + 1
                         for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                        st.success("✅ ルーティーン同期完了")
+                        st.success("✅ 同期完了")
                     else:
                         sheet.append_row(row_data)
-                        st.success("✅ ルーティーン新規保存完了")
+                        st.success("✅ 新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
@@ -169,18 +169,24 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
         return st.session_state.get(time_key, "07:00")
 
 # ==========================================
-# 📥 データ読み込み & 初期化
+# 📥 データ読み込み & 初期化 (KeyError対策)
 # ==========================================
-if 'init_done' not in st.session_state:
-    st.session_state['init_done'] = False
-    st.session_state['wake_up_time'] = time(7, 0)
-    st.session_state['workout_type'] = "なし"
-    st.session_state['workout_time'] = time(18, 0)
-    st.session_state['bed_time'] = time(23, 30)
-    st.session_state['diary_text'] = ""
-    st.session_state['meal_breakfast'] = ""
-    st.session_state['meal_lunch'] = ""
-    st.session_state['meal_dinner'] = ""
+# セッション状態の安全な初期化
+init_keys = {
+    'init_done': False,
+    'wake_up_time': time(7, 0),
+    'workout_type': "なし",
+    'workout_time': time(18, 0),
+    'bed_time': time(23, 30),
+    'diary_text': "",
+    'meal_breakfast': "",
+    'meal_lunch': "",
+    'meal_dinner': ""
+}
+
+for k, v in init_keys.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 today_str = get_today_str()
 
@@ -229,7 +235,7 @@ st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
 
-# --- 設定・記録エリア ---
+# --- 1. スケジュール設定 ---
 with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
@@ -248,7 +254,7 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         st.session_state['workout_type'] = final_w
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
-# --- 🍴 食事記録セクション (NEW!) ---
+# --- 2. 食事記録セクション (NEW!) ---
 with st.expander("🍴 食事記録 (mealrecord)", expanded=False):
     st.caption("サプリメントは同期時に自動付与されます")
     m_col1, m_col2, m_col3 = st.columns(3)
