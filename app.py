@@ -7,7 +7,7 @@ import json
 # ==========================================
 # 🚀 1. ページ設定 & デザイン
 # ==========================================
-st.set_page_config(page_title="Phase 4 Dashboard v2.6", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Phase 4 Dashboard v2.7", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
@@ -24,11 +24,10 @@ st.markdown("""
 # ⚙️ 設定エリア
 # ==========================================
 SPREADSHEET_NAME = 'Phase4_Log' 
-WORKSHEET_NAME = 'v2'          # ルーティーン用
-MEAL_WORKSHEET_NAME = 'mealrecord' # 食事記録用
+WORKSHEET_NAME = 'v2'          
+MEAL_WORKSHEET_NAME = 'mealrecord' 
 JST = timezone(timedelta(hours=+9), 'JST')
 
-# 同期時に mealrecord の E列へ自動付与されるマスターリスト
 AUTO_SUPPLEMENTS = """MCTオイル 7g
 • カルニチン 4錠
 • タケダVitC 9錠
@@ -182,7 +181,7 @@ if 'init_done' not in st.session_state:
     st.session_state['meal_dinner'] = ""
 
 if not st.session_state['init_done']:
-    # 1. ルーティーン読込 (ヘッダー重複対策)
+    # 1. ルーティーン読込
     sheet = get_worksheet(WORKSHEET_NAME)
     if sheet:
         try:
@@ -205,7 +204,7 @@ if not st.session_state['init_done']:
                             else: st.session_state[f"{key}_done"], st.session_state[f"{key}_time"] = True, val
         except: pass
     
-    # 2. 食事記録読込 (ヘッダー重複対策)
+    # 2. 食事記録読込
     m_sheet = get_worksheet(MEAL_WORKSHEET_NAME)
     if m_sheet:
         try:
@@ -220,20 +219,20 @@ if not st.session_state['init_done']:
                         st.session_state['meal_breakfast'] = str(m_row.get('BREAKFAST', ""))
                         st.session_state['meal_lunch'] = str(m_row.get('LUNCH', ""))
                         st.session_state['meal_dinner'] = str(m_row.get('DINNER', ""))
-                        st.toast(f"✅ {today_str} の食事データを復旧しました")
+                        st.toast(f"✅ {today_str} の食事を復元しました")
         except: pass
     st.session_state['init_done'] = True
 
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4 Dashboard v2.6")
+st.title("🔥 Phase 4 Dashboard v2.7")
 st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
 
-# --- 設定 ---
-with st.expander("🛠 スケジュール設定", expanded=True):
+# --- スケジュール設定（閉じた状態で開始） ---
+with st.expander("🛠 スケジュール設定", expanded=False):
     c1, c2 = st.columns(2)
     with c1:
         st.session_state['wake_up_time'] = st.time_input("👀 起床", value=st.session_state['wake_up_time'])
@@ -251,15 +250,16 @@ with st.expander("🛠 スケジュール設定", expanded=True):
         st.session_state['workout_type'] = final_w
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
-# --- 🍴 食事記録 (mealrecord) ---
-with st.expander("🍴 食事記録 (mealrecord)", expanded=True):
+# --- 🍴 食事記録（閉じた状態で開始） ---
+with st.expander("🍴 食事記録 (mealrecord)", expanded=False):
+    st.caption("サプリメントは同期時に自動付与されます")
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1: st.text_area("🍳 BREAKFAST", key="meal_breakfast", height=120)
     with m_col2: st.text_area("🍱 LUNCH", key="meal_lunch", height=120)
     with m_col3: st.text_area("🥩 DINNER", key="meal_dinner", height=120)
     if st.button("🔄 食事記録を同期", use_container_width=True): sync_meal_data()
 
-# --- タイムライン（詳細ルーティーン） ---
+# --- タイムライン ---
 st.markdown("### 🌅 Morning")
 today_date = get_now_jst().date()
 ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
