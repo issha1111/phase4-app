@@ -7,7 +7,7 @@ import json
 # ==========================================
 # 🚀 1. ページ設定 & デザイン
 # ==========================================
-st.set_page_config(page_title="Phase 4 Dashboard v2.3", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Phase 4 Dashboard v2.6", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
@@ -24,10 +24,11 @@ st.markdown("""
 # ⚙️ 設定エリア
 # ==========================================
 SPREADSHEET_NAME = 'Phase4_Log' 
-WORKSHEET_NAME = 'v2'          
-MEAL_WORKSHEET_NAME = 'mealrecord' 
+WORKSHEET_NAME = 'v2'          # ルーティーン用
+MEAL_WORKSHEET_NAME = 'mealrecord' # 食事記録用
 JST = timezone(timedelta(hours=+9), 'JST')
 
+# 同期時に mealrecord の E列へ自動付与されるマスターリスト
 AUTO_SUPPLEMENTS = """MCTオイル 7g
 • カルニチン 4錠
 • タケダVitC 9錠
@@ -45,7 +46,7 @@ def get_now_jst(): return datetime.now(JST)
 def get_today_str(): return get_now_jst().strftime('%Y-%m-%d')
 
 # ==========================================
-# 🛠 関数定義
+# 🛠 接続 & 同期関数
 # ==========================================
 @st.cache_resource
 def get_gc():
@@ -53,9 +54,8 @@ def get_gc():
         if "gcp_json" not in st.secrets:
             st.error("Secretsに 'gcp_json' が見つかりません。")
             return None
-        raw_json = st.secrets["gcp_json"].strip()
-        safe_json = raw_json.replace('\\', '\\\\').replace('\\\\n', '\\n')
-        creds_dict = json.loads(safe_json, strict=False)
+        raw_json = st.secrets["gcp_json"].strip().replace('\\', '\\\\').replace('\\\\n', '\\n')
+        creds_dict = json.loads(raw_json, strict=False)
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
         return gspread.service_account_from_dict(creds_dict)
@@ -86,10 +86,10 @@ def sync_meal_data():
             if today_str in dates:
                 idx = dates.index(today_str) + 1
                 sheet.update(f'A{idx}:E{idx}', [meal_row])
-                st.success(f"🔥 mealrecord 更新完了 ({today_str})")
+                st.success(f"✅ mealrecord 更新完了 ({today_str})")
             else:
                 sheet.append_row(meal_row)
-                st.success(f"🚀 mealrecord 新規保存完了 ({today_str})")
+                st.success(f"✅ mealrecord 新規保存完了 ({today_str})")
         except Exception as e: st.error(f"Meal Sync Error: {e}")
 
 def sync_button(key):
@@ -120,10 +120,10 @@ def sync_button(key):
                     if today_str in dates:
                         idx = dates.index(today_str) + 1
                         for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                        st.success("✅ ルーティーン同期完了")
+                        st.success("✅ 同期完了")
                     else:
                         sheet.append_row(row_data)
-                        st.success("✅ ルーティーン新規保存完了")
+                        st.success("✅ 新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
@@ -135,15 +135,13 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
         with st.container(border=False):
             st.markdown(f'<div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; color: gray;"><h4 style="margin:0; text-decoration: line-through;">{title.split("<")[0].strip()}</h4><small>✅ Completed at {st.session_state[time_key]}</small></div>', unsafe_allow_html=True)
             if st.button("↺ 修正", key=f"{key_prefix}_undo"):
-                st.session_state[done_key] = False
-                st.rerun()
+                st.session_state[done_key] = False; st.rerun()
         return st.session_state.get(time_key, "07:00")
     elif st.session_state[skipped_key]:
         with st.container(border=False):
-            st.markdown(f'<div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;"><h4 style="margin:0;">{title.split("<")[0].strip()}</h4><small>⚠️ Skipped</small></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: #e0e0e0; padding: 10px; border-radius: 10px; color: #9e9e9e;"><h4 style="margin:0;">{title.split("<")[0].strip()}</h4><small>⚠️ Skipped (Rest Day)</small></div>', unsafe_allow_html=True)
             if st.button("↺ 修正して実行", key=f"{key_prefix}_unskip"):
-                st.session_state[skipped_key] = False
-                st.rerun()
+                st.session_state[skipped_key] = False; st.rerun()
         return "SKIPPED"
     else:
         with st.container(border=True):
@@ -162,11 +160,13 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
                 with cols[2]:
                     st.write(""); st.write("")
                     if st.button("❌ やらない", key=f"{key_prefix}_skip", use_container_width=True):
-                        st.session_state[skipped_key] = True; st.rerun()
+                        st.session_state[skipped_key] = True
+                        if key_prefix == "evening_workout": st.session_state["evening_pre_workout_skipped"] = True
+                        st.rerun()
         return st.session_state.get(time_key, "07:00")
 
 # ==========================================
-# 📥 データ読み込み & 初期化
+# 📥 データ読み込み & 初期化 (リロード復旧)
 # ==========================================
 today_str = get_today_str()
 
@@ -188,7 +188,6 @@ if not st.session_state['init_done']:
         try:
             raw_routine = sheet.get_all_values()
             if len(raw_routine) > 1:
-                # 空白や重複を COL_N に置き換え
                 headers = [h if (h and h.strip()) else f"COL_{i}" for i, h in enumerate(raw_routine[0])]
                 df = pd.DataFrame(raw_routine[1:], columns=headers)
                 if 'Date' in df.columns:
@@ -206,16 +205,14 @@ if not st.session_state['init_done']:
                             else: st.session_state[f"{key}_done"], st.session_state[f"{key}_time"] = True, val
         except: pass
     
-    # 2. 食事記録読込 (ヘッダー重複対策の要)
+    # 2. 食事記録読込 (ヘッダー重複対策)
     m_sheet = get_worksheet(MEAL_WORKSHEET_NAME)
     if m_sheet:
         try:
             raw_m = m_sheet.get_all_values()
             if len(raw_m) > 1:
-                # 空白や重複を COL_N に強制置換してエラーを回避
                 headers_m = [h if (h and h.strip()) else f"COL_{i}" for i, h in enumerate(raw_m[0])]
                 m_df = pd.DataFrame(raw_m[1:], columns=headers_m)
-                
                 if 'DATE' in m_df.columns:
                     target_row = m_df[m_df['DATE'].astype(str) == today_str]
                     if not target_row.empty:
@@ -223,21 +220,20 @@ if not st.session_state['init_done']:
                         st.session_state['meal_breakfast'] = str(m_row.get('BREAKFAST', ""))
                         st.session_state['meal_lunch'] = str(m_row.get('LUNCH', ""))
                         st.session_state['meal_dinner'] = str(m_row.get('DINNER', ""))
-                        st.toast(f"✅ {today_str} の食事を復元しました")
-        except Exception as e:
-            st.error(f"Meal Load Error: {e}")
+                        st.toast(f"✅ {today_str} の食事データを復旧しました")
+        except: pass
     st.session_state['init_done'] = True
 
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4 Dashboard v2.3")
+st.title("🔥 Phase 4 Dashboard v2.6")
 st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
 
 # --- 設定 ---
-with st.expander("🛠 スケジュール設定", expanded=False):
+with st.expander("🛠 スケジュール設定", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
         st.session_state['wake_up_time'] = st.time_input("👀 起床", value=st.session_state['wake_up_time'])
@@ -255,36 +251,54 @@ with st.expander("🛠 スケジュール設定", expanded=False):
         st.session_state['workout_type'] = final_w
         st.session_state['bed_time'] = st.time_input("🛏️ 就寝目標", value=st.session_state['bed_time'])
 
-# --- 🍴 食事記録 ---
+# --- 🍴 食事記録 (mealrecord) ---
 with st.expander("🍴 食事記録 (mealrecord)", expanded=True):
-    st.caption("見出しの空白も自動補完して読み込みます。")
     m_col1, m_col2, m_col3 = st.columns(3)
-    with m_col1:
-        st.text_area("🍳 朝食", key="meal_breakfast", height=120)
-    with m_col2:
-        st.text_area("🍱 昼食", key="meal_lunch", height=120)
-    with m_col3:
-        st.text_area("🥩 夕食", key="meal_dinner", height=120)
-    
-    if st.button("🔄 食事記録のみ同期", use_container_width=True):
-        sync_meal_data()
+    with m_col1: st.text_area("🍳 BREAKFAST", key="meal_breakfast", height=120)
+    with m_col2: st.text_area("🍱 LUNCH", key="meal_lunch", height=120)
+    with m_col3: st.text_area("🥩 DINNER", key="meal_dinner", height=120)
+    if st.button("🔄 食事記録を同期", use_container_width=True): sync_meal_data()
 
-# --- タイムライン ---
+# --- タイムライン（詳細ルーティーン） ---
 st.markdown("### 🌅 Morning")
-routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
-routine_block("2. 朝トレ・コールドシャワー", ["HIIT 4分", "冷水シャワー 1分"], "morning_muscle", default_time_val=time(7, 30))
-routine_block("3. 朝の有酸素", ["散歩 20分"], "morning_walk", default_time_val=time(8, 0))
-routine_block("4. 朝食（プロテイン+サプリ）", ["プロテイン 30g", "サプリメント一式"], "morning_breakfast", default_time_val=time(8, 30))
+today_date = get_now_jst().date()
+ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
 
-st.markdown("### 🏙️ Day & Night")
-routine_block("5. 昼食（OMAD用）", ["PFC管理食"], "lunch", default_time_val=time(13, 0), can_skip=True)
-routine_block("6. プレワークアウト", ["カフェイン", "ベータアラニン"], "evening_pre_workout", default_time_val=time(17, 30), can_skip=True)
-routine_block("7. メイントレーニング", ["筋トレ or 有酸素"], "evening_workout", default_time_val=time(18, 0), can_skip=True)
-routine_block("8. 夕食 & サプリ", ["ラストミール", "夜用サプリメント"], "dinner_after", default_time_val=time(20, 0))
-routine_block("9. 就寝準備", ["ストレッチ", "デジタルデトックス"], "bedtime_routine", default_time_val=time(23, 0))
+try:
+    ig_dt = datetime.combine(today_date, datetime.strptime(ign_time, '%H:%M').time())
+    target_m_str = (ig_dt + timedelta(minutes=30)).strftime('%H:%M'); target_m_val = (ig_dt + timedelta(minutes=30)).time()
+except:
+    target_m_str = "--:--"; target_m_val = time(7, 45)
+
+routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_m_str} Start", default_time_val=target_m_val)
+routine_block("3. 朝散歩", ["外気浴 15-20分"], "morning_walk", default_time_val=time(8, 0))
+routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
+
+st.markdown("### ☀️ Lunch")
+routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
+
+workout_type = st.session_state['workout_type']
+if "なし" not in workout_type:
+    st.markdown("### 🌆 Evening (Extra Burn)")
+    w_time = st.session_state['workout_time']
+    pre_w_val = (datetime.combine(today_date, w_time) - timedelta(minutes=30)).time()
+    routine_block(f"6. 運動前準備 ({workout_type})", ["カルニチン 2錠 (30分前)"], "evening_pre_workout", pre_w_val.strftime('%H:%M'), default_time_val=pre_w_val)
+    routine_block(f"7. ガチ運動 ({workout_type})", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time, can_skip=True)
+
+st.markdown("### 🌙 Night & Recovery")
+routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
+
+bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
+bath_val = (bed_dt - timedelta(minutes=90)).time()
+supple_val = (bed_dt - timedelta(minutes=50)).time()
+target_label = f"入浴目安: {bath_val.strftime('%H:%M')} / 摂取目標: {supple_val.strftime('%H:%M')}"
+
+bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "マグネシウム 2錠", "テアニン 1錠", "タケダVitC 2錠"]
+if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
+    bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
+routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
 
 st.markdown("### 📝 Diary")
-st.text_area("今日の振り返り・メモ", key="diary_text", height=150)
-
+st.session_state['diary_text'] = st.text_area("今日の振り返り・メモ", value=st.session_state.get('diary_text', ""), height=150)
 st.markdown("---")
 sync_button("bottom_sync")
