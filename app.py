@@ -7,7 +7,7 @@ import json
 # ==========================================
 # 🚀 1. ページ設定 & デザイン
 # ==========================================
-st.set_page_config(page_title="Phase 4 Dashboard v2.1", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Phase 4 Dashboard v2.2", page_icon="⚡", layout="centered")
 
 st.markdown("""
     <style>
@@ -75,11 +75,12 @@ def sync_meal_data():
     if not sheet: return
     with st.spinner("Saving Meal Record..."):
         today_str = get_today_str()
+        # st.session_state['meal_xxx'] から直接取得
         meal_row = [
             today_str,
-            st.session_state['meal_breakfast'],
-            st.session_state['meal_lunch'],
-            st.session_state['meal_dinner'],
+            st.session_state.get('meal_breakfast', ""),
+            st.session_state.get('meal_lunch', ""),
+            st.session_state.get('meal_dinner', ""),
             AUTO_SUPPLEMENTS
         ]
         try:
@@ -87,10 +88,10 @@ def sync_meal_data():
             if today_str in dates:
                 idx = dates.index(today_str) + 1
                 sheet.update(f'A{idx}:E{idx}', [meal_row])
-                st.success(f"✅ mealrecord 更新完了 ({today_str})")
+                st.success(f"🔥 mealrecord 更新完了 ({today_str})")
             else:
                 sheet.append_row(meal_row)
-                st.success(f"✅ mealrecord 新規保存完了 ({today_str})")
+                st.success(f"🚀 mealrecord 新規保存完了 ({today_str})")
         except Exception as e: st.error(f"Meal Sync Error: {e}")
 
 def sync_button(key):
@@ -121,10 +122,10 @@ def sync_button(key):
                     if today_str in dates:
                         idx = dates.index(today_str) + 1
                         for i, val in enumerate(row_data): sheet.update_cell(idx, i+1, val)
-                        st.success("✅ 同期完了")
+                        st.success("✅ ルーティーン同期完了")
                     else:
                         sheet.append_row(row_data)
-                        st.success("✅ 新規保存完了")
+                        st.success("✅ ルーティーン新規保存完了")
                 except Exception as e: st.error(f"Error: {e}")
 
 def routine_block(title, items, key_prefix, target_time_str=None, default_time_val=None, can_skip=False):
@@ -167,24 +168,24 @@ def routine_block(title, items, key_prefix, target_time_str=None, default_time_v
         return st.session_state.get(time_key, "07:00")
 
 # ==========================================
-# 📥 データ読み込み & 初期化
+# 📥 データ読み込み & 初期化 (リロード対策)
 # ==========================================
+today_str = get_today_str()
+
 if 'init_done' not in st.session_state:
     st.session_state['init_done'] = False
+    # デフォルト値の設定
     st.session_state['wake_up_time'] = time(7, 0)
     st.session_state['workout_type'] = "なし"
     st.session_state['workout_time'] = time(18, 0)
     st.session_state['bed_time'] = time(23, 30)
     st.session_state['diary_text'] = ""
-    # ここでキーを定義しておくことで、text_areaのkey指定と連動させる
     st.session_state['meal_breakfast'] = ""
     st.session_state['meal_lunch'] = ""
     st.session_state['meal_dinner'] = ""
 
-today_str = get_today_str()
-
 if not st.session_state['init_done']:
-    # メインルーティーンシート
+    # 1. メインルーティーンデータの読込
     sheet = get_worksheet(WORKSHEET_NAME)
     if sheet:
         try:
@@ -205,29 +206,33 @@ if not st.session_state['init_done']:
                         else: st.session_state[f"{key}_done"], st.session_state[f"{key}_time"] = True, val
         except: pass
     
-    # 食事記録シート (mealrecord) から読込
+    # 2. 食事記録 (mealrecord) の読込（リロード対策の核心）
     m_sheet = get_worksheet(MEAL_WORKSHEET_NAME)
     if m_sheet:
         try:
-            m_df = pd.DataFrame(m_sheet.get_all_records())
-            if not m_df.empty and today_str in m_df['DATE'].values:
-                m_row = m_df[m_df['DATE'] == today_str].iloc[0]
+            m_data = m_sheet.get_all_records()
+            m_df = pd.DataFrame(m_data)
+            if not m_df.empty and today_str in m_df['DATE'].astype(str).values:
+                m_row = m_df[m_df['DATE'].astype(str) == today_str].iloc[0]
                 st.session_state['meal_breakfast'] = str(m_row.get('BREAKFAST', ""))
                 st.session_state['meal_lunch'] = str(m_row.get('LUNCH', ""))
                 st.session_state['meal_dinner'] = str(m_row.get('DINNER', ""))
-        except: pass
+                st.toast(f"✅ {today_str} の食事データを復元しました")
+        except Exception as e:
+            st.error(f"Meal Load Error: {e}")
+    
     st.session_state['init_done'] = True
 
 # ==========================================
 # 🖥 メインUI
 # ==========================================
-st.title("🔥 Phase 4 Dashboard v2.1")
+st.title("🔥 Phase 4 Dashboard v2.2")
 st.caption(f"{today_str} (JST)")
 
 sync_button("top_sync")
 
 # --- 設定 ---
-with st.expander("🛠 スケジュール設定", expanded=True):
+with st.expander("🛠 スケジュール設定", expanded=False):
     c1, c2 = st.columns(2)
     with c1:
         st.session_state['wake_up_time'] = st.time_input("👀 起床", value=st.session_state['wake_up_time'])
@@ -247,25 +252,27 @@ with st.expander("🛠 スケジュール設定", expanded=True):
 
 # --- 🍴 食事記録 (mealrecord) ---
 with st.expander("🍴 食事記録 (mealrecord)", expanded=True):
-    st.caption("サプリメントは同期時に自動付与されます")
+    st.caption("サプリメントは同期時に自動付与されます。同期済みデータはリロードで復元されます。")
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
-        # keyを指定することで、リロードしてもsession_stateが維持されるように修正
-        st.text_area("🍳 BREAKFAST", key="meal_breakfast", height=120)
+        # keyを指定することでsession_stateと自動同期。読み込んだ初期値が表示される
+        st.text_area("🍳 朝食", key="meal_breakfast", height=120)
     with m_col2:
-        st.text_area("🍱 LUNCH", key="meal_lunch", height=120)
+        st.text_area("🍱 昼食", key="meal_lunch", height=120)
     with m_col3:
-        st.text_area("🥩 DINNER", key="meal_dinner", height=120)
+        st.text_area("🥩 夕食", key="meal_dinner", height=120)
     
-    if st.button("🔄 食事記録を同期", use_container_width=True):
+    if st.button("🔄 食事記録のみ同期", use_container_width=True):
         sync_meal_data()
 
-# --- タイムライン（以下省略・既存のまま） ---
+# --- タイムライン ---
 st.markdown("### 🌅 Morning")
 ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
-# ... (中略) ...
-# ルーティーン部分や日記部分も既存のロジックのままです。
+# ... (他のroutine_blockも同様に続く) ...
+# 注意：あなたの元のコードにあった他の routine_block もここに順次配置してください。
+
 st.markdown("### 📝 Diary")
 st.text_area("今日の振り返り・メモ", key="diary_text", height=150)
+
 st.markdown("---")
 sync_button("bottom_sync")
