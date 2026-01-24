@@ -71,8 +71,11 @@ def get_worksheet(name):
 def sync_meal_data():
     sheet = get_worksheet(MEAL_WORKSHEET_NAME)
     if not sheet: return
+
     with st.spinner("Saving Meal Record..."):
         today_str = get_today_str()
+        
+        # 書き込むデータ（A列〜E列の5つ）
         meal_row = [
             today_str,
             st.session_state.get('meal_breakfast', ""),
@@ -80,16 +83,27 @@ def sync_meal_data():
             st.session_state.get('meal_dinner', ""),
             AUTO_SUPPLEMENTS
         ]
+
         try:
-            dates = sheet.col_values(1)
+            # 1. A列（日付）を全部読み込む
+            dates = sheet.col_values(1) 
+            
             if today_str in dates:
+                # 【上書きモード】既に今日の日付がある場合
                 idx = dates.index(today_str) + 1
-                sheet.update(f'A{idx}:E{idx}', [meal_row])
+                # 範囲指定で強制書き込み (A〜E列)
+                sheet.update(range_name=f'A{idx}:E{idx}', values=[meal_row])
                 st.success(f"✅ mealrecord 更新完了 ({today_str})")
             else:
-                sheet.append_row(meal_row)
+                # 【新規モード】今日の日付がない場合
+                # append_row は使わず、行番号を計算して強制書き込み
+                # これで右側に何があってもズレずにA列から書けます
+                next_row = len(dates) + 1
+                sheet.update(range_name=f'A{next_row}:E{next_row}', values=[meal_row])
                 st.success(f"✅ mealrecord 新規保存完了 ({today_str})")
-        except Exception as e: st.error(f"Meal Sync Error: {e}")
+
+        except Exception as e:
+            st.error(f"Meal Sync Error: {e}")
 
 def sync_button(key):
     if st.button("🔄 全データを同期 (Save to Drive)", type="primary", use_container_width=True, key=key):
