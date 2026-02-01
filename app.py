@@ -307,7 +307,7 @@ bath_val = (bed_dt - timedelta(minutes=90)).time()
 supple_val = (bed_dt - timedelta(minutes=50)).time()
 target_label = f"入浴目安: {bath_val.strftime('%H:%M')} / 摂取目標: {supple_val.strftime('%H:%M')}"
 
-bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "亜鉛 1錠", "マグネシウム 2錠", "(運動した日はクルクミン 2錠)", "テアニン 1錠", "タケダVitC 2錠"]
+bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "亜鉛 1錠", "マグネシウム 2錠", "( 運動した日はクルクミン 2錠 )", "テアニン 1錠", "タケダVitC 2錠"]
 if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
     bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
