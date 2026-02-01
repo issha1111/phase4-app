@@ -26,6 +26,38 @@ def get_worksheet():
     gc = gspread.service_account_from_dict(creds_dict)
     return gc.open('Phase4_Log').worksheet('SleepLog')
 
+def normalize_time_field(value):
+    """
+    Geminiから返ってきた値を必ず H:MM 形式の文字列にする。
+    ありうる入力パターン:
+      - "0:47" / "00:47"  → そのまま H:MM で返す
+      - 57                → 分として H:MM に変換
+      - 57.0              → 同上
+      - "57"              → 同上
+      - "1:18:00"         → H:MM に変換
+    """
+    if value is None or value == "":
+        return "0:00"
+
+    s = str(value).strip()
+
+    # "H:MM" か "HH:MM" の形式なら直接パース
+    if ":" in s:
+        parts = s.split(":")
+        h = int(parts[0])
+        m = int(parts[1])
+        return f"{h}:{m:02d}"
+
+    # 数値（分）の場合
+    try:
+        total_minutes = int(float(s))
+        h = total_minutes // 60
+        m = total_minutes % 60
+        return f"{h}:{m:02d}"
+    except ValueError:
+        return "0:00"
+        
+
 def analyze_images(images):
     # モデル設定
     model = genai.GenerativeModel('models/gemini-3-flash-preview')
