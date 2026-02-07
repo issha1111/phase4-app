@@ -300,7 +300,7 @@ if "なし" not in workout_type:
     routine_block(f"7. ガチ運動 ({workout_type})", ["心拍数管理", "水分補給"], "evening_workout", w_time.strftime('%H:%M'), default_time_val=w_time, can_skip=True)
 
 st.markdown("### 🌙 Night & Recovery")
-routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
+routine_block("8. 夕食後", ["ご飯 MAX 120g", "エビオス 10錠", "ビオスリー 2錠", "V-E400 1錠", "Omega3 2錠", "Stress B 1錠"], "dinner_after", default_time_val=time(19, 0))
 
 bed_dt = datetime.combine(today_date, st.session_state['bed_time'])
 bath_val = (bed_dt - timedelta(minutes=90)).time()
