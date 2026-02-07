@@ -276,7 +276,7 @@ with st.expander("🍴 食事記録 (mealrecord)", expanded=False):
 # --- タイムライン ---
 st.markdown("### 🌅 Morning")
 today_date = get_now_jst().date()
-ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "マグネシウム 2錠", "クルクミン 2錠", "カルニチン 2錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
+ign_time = routine_block("1. 爆速点火フェーズ", ["MCTオイル 7g", "マグネシウム 2錠", "クルクミン 2錠", "カルニチン 2錠", "NAC 1錠", "R-リポ 1錠", "タケダVitC 3錠", "QPコーワα 1錠", "ビタミンD 1錠"], "morning_ignition", default_time_val=time(7, 15))
 
 try:
     ig_dt = datetime.combine(today_date, datetime.strptime(ign_time, '%H:%M').time())
@@ -286,10 +286,10 @@ except:
 
 routine_block("2. 筋肉起動 & 温冷浴", ["ヨガ・プランク2分・スクワット10", "温水3分 ➡ 冷水1分"], "morning_muscle", f"{target_m_str} Start", default_time_val=target_m_val)
 routine_block("3. 朝散歩", ["外気浴 15-20分"], "morning_walk", default_time_val=time(8, 0))
-routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
+routine_block("4. 朝食 & サプリ", ["ベースブレッド 1個", "エビオス 10錠", "ビオスリー 2錠", "Stress B 1錠", "Omega3 2錠", "ビオチン 2錠"], "morning_breakfast", default_time_val=time(8, 30))
 
 st.markdown("### ☀️ Lunch")
-routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 2錠"], "lunch", default_time_val=time(12, 0))
+routine_block("5. 昼食 (代謝維持)", ["ベースブレッド", "エビオス 10錠", "ビオスリー 2錠", "タケダVitC 3錠"], "lunch", default_time_val=time(12, 0))
 
 workout_type = st.session_state['workout_type']
 if "なし" not in workout_type:
@@ -307,7 +307,7 @@ bath_val = (bed_dt - timedelta(minutes=90)).time()
 supple_val = (bed_dt - timedelta(minutes=50)).time()
 target_label = f"入浴目安: {bath_val.strftime('%H:%M')} / 摂取目標: {supple_val.strftime('%H:%M')}"
 
-bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "亜鉛 1錠", "マグネシウム 2錠", "( 運動した日はクルクミン 2錠 )", "テアニン 1錠", "タケダVitC 2錠"]
+bed_items = ["お風呂 15分 (40℃)", "QPコーワヒーリング 2錠", "亜鉛 1錠", "マグネシウム 2錠", "( 運動した日はクルクミン 2錠 )", "テアニン 1錠", "タケダVitC 3錠"]
 if "なし" in workout_type or st.session_state.get("evening_workout_skipped", False):
     bed_items.append("💊 カルニチン 2錠 (夕方分スライド)")
 routine_block("9. 究極回復セット", bed_items, "bedtime_routine", target_label, default_time_val=bath_val)
